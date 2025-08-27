@@ -395,8 +395,33 @@ def main():
         log_info("程序退出")
         return
 
-    base_dir = os.getcwd()
-    log_info(f"当前工作目录: {base_dir}")
+    # 获取可执行文件所在目录作为工作目录
+    if getattr(sys, 'frozen', False):
+        # 如果是打包后的可执行文件
+        executable_dir = os.path.dirname(sys.executable)
+        log_info(f"检测到打包环境，可执行文件路径: {sys.executable}")
+        log_info(f"可执行文件所在目录: {executable_dir}")
+        
+        # 询问用户是否使用可执行文件所在目录作为工作目录
+        while True:
+            choice = input(f"\n是否使用可执行文件所在目录作为工作目录？\n当前目录: {os.getcwd()}\n可执行文件目录: {executable_dir}\n请选择 (y/n): ").strip().lower()
+            if choice in ['y', 'yes', '是']:
+                base_dir = executable_dir
+                os.chdir(base_dir)
+                log_success(f"已切换到可执行文件所在目录: {base_dir}")
+                break
+            elif choice in ['n', 'no', '否']:
+                base_dir = os.getcwd()
+                log_info(f"继续使用当前工作目录: {base_dir}")
+                break
+            else:
+                print("请输入 y/yes/是 或 n/no/否")
+    else:
+        # 如果是Python脚本直接运行
+        base_dir = os.getcwd()
+        log_info(f"检测到脚本环境，使用当前工作目录: {base_dir}")
+    
+    log_info(f"最终工作目录: {base_dir}")
     log_info(f"处理类型: {'周结' if processing_type == 'week' else '月结'}")
     entries = list_process_entries(base_dir)
 

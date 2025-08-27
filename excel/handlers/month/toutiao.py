@@ -5,7 +5,7 @@ from typing import List
 import duckdb
 
 from excel.common import select_excel_from_matches, SkipEntryException, select_output_excel
-from excel.log import log_stage, log_error, log_info, log_success, execute_sql_with_timing
+from excel.log import log_stage, log_error, log_info, log_success, log_warning, execute_sql_with_timing
 from excel.select_excels import select_from_excel
 
 
@@ -15,8 +15,10 @@ def toutiao_month_entry_handler(entry_dir: str, excels: List[str],
     "头条"月结入口处理函数
     - 专门处理月结数据，数据量更大，sheet数量更多
     - 查找所需Excel文件（简化匹配规则，不再需要数字结尾）
-    - 只处理消耗数据，不再区分充值和消耗
-    - 字段映射：广告主账户id、广告主公司名称、共享子钱包名称、结算消耗、结算一级行业、结算二级行业
+    - 字段映射：广告主账户id、共享子钱包名称、非赠款消耗、返佣消耗、结算一级行业、结算二级行业
+    - 与媒体账户表联合：头条中的广告主账户id 对应 媒体账户表的账号ID
+    - 最终输出：客户名称、广告主账户id、广告主公司名称、共享子钱包名称、结算消耗、结算一级行业、结算二级行业
+    - 计算逻辑：结算消耗 = 非赠款消耗 - 返佣消耗
     """
     entry_name = os.path.basename(entry_dir)
     log_stage("头条月结处理", f"开始处理头条月结入口: {entry_name}")
@@ -61,21 +63,21 @@ def toutiao_month_entry_handler(entry_dir: str, excels: List[str],
     output_excel = select_output_excel(parent_dir, f"month_{entry_name}")
     log_info(f"[{entry_name}] 输出文件: {os.path.basename(output_excel)}")
 
-    # 阶段3: 数据加载（只处理消耗数据）
+    # 阶段3: 数据加载
     log_stage("数据加载", "从Excel文件加载头条月结数据到临时表")
     
     from excel.union_sheets import union_sheets_concurrent
     
-    # 头条字段映射：根据图示调整字段结构
+    # 头条字段映射：根据新需求调整字段
+    # 需要存储：广告主账户id、共享子钱包名称、非赠款消耗、返佣消耗、结算一级行业、结算二级行业
     toutiao_projections = [
         ('"广告主账户id"', 'advertiser_account_id'),
         ('"广告主公司名称"', 'advertiser_company_name'),
         ('"共享子钱包名称"', 'shared_wallet_name'),
-        ('"结算消耗"', 'settle_consume'),
+        ('"非赠款消耗"', 'non_gift_consume'),
+        ('"返佣消耗"', 'rebate_consume'), 
         ('"结算一级行业"', 'settle_industry_level1'),
-        ('"结算二级行业"', 'settle_industry_level2'),
-        ('"客户名称"', 'client_name'),
-        ('"账户类型"', 'account_type')
+        ('"结算二级行业"', 'settle_industry_level2')
     ]
     
     t_toutiao = 't_toutiao_month'
@@ -119,59 +121,126 @@ def toutiao_month_entry_handler(entry_dir: str, excels: List[str],
         log_error(f"[{entry_name}] 头条数据加载失败: {e}")
         return
 
-    # SQL模板，根据图示调整汇总逻辑
+    # SQL模板：根据新需求调整汇总逻辑
     sql_template = """
--- 头条月结数据处理（根据流程图调整汇总逻辑）
+-- 头条月结数据处理：结算消耗 = 非赠款消耗 - 返佣消耗
 
 DROP TABLE IF EXISTS t_toutiao_month_final;
 
--- 汇总头条消耗数据，按账户ID和客户名称分组
+-- 汇总头条数据，计算结算消耗，并与媒体账户表关联
 CREATE TABLE t_toutiao_month_final AS
-SELECT advertiser_account_id AS "广告主账户id",
-       any_value(advertiser_company_name) AS "广告主公司名称",
-       any_value(shared_wallet_name) AS "共享子钱包名称",
-       any_value(client_name) AS "客户名称",
-       sum(settle_consume::DOUBLE) AS "结算消耗",
-       any_value(settle_industry_level1) AS "结算一级行业", 
-       any_value(settle_industry_level2) AS "结算二级行业",
-       any_value(account_type) AS "账户类型",
-       '头条' AS "媒体平台"
-FROM {toutiao_table}
-WHERE settle_consume::DOUBLE > 0.00001
-GROUP BY advertiser_account_id, client_name;
-
--- 导出月结数据，统一输出格式
-COPY
-  (SELECT t2.n1 AS "媒体账户主体",
-          COALESCE(t1."客户名称", t2.n2) AS "客户",
-          t1."媒体平台",
-          '月结' AS "数据类型",
-          t1."广告主账户id" AS "账户ID",
-          t1."广告主公司名称" AS "账户名称",
-          t1."共享子钱包名称",
-          t1."结算消耗",
-          t1."结算一级行业",
-          t1."结算二级行业",
-          t1."账户类型"
-   FROM t_toutiao_month_final AS t1
-   LEFT JOIN account AS t2 ON t1."广告主账户id" = t2.id
-   ORDER BY t1."结算消耗" DESC) TO '{output_excel}' WITH (FORMAT xlsx, HEADER true);
+SELECT t1.advertiser_account_id AS "广告主账户id",
+       any_value(t1.advertiser_company_name) AS "广告主公司名称", 
+       any_value(t1.shared_wallet_name) AS "共享子钱包名称",
+       any_value(t2.n2) AS "客户名称",  -- 从媒体账户表获取客户名称
+       sum(COALESCE(t1.non_gift_consume::DOUBLE, 0) - COALESCE(t1.rebate_consume::DOUBLE, 0)) AS "结算消耗",  -- 结算消耗 = 非赠款消耗 - 返佣消耗，处理NULL值
+       any_value(t1.settle_industry_level1) AS "结算一级行业",
+       any_value(t1.settle_industry_level2) AS "结算二级行业"
+FROM {toutiao_table} AS t1
+LEFT JOIN account AS t2 ON CAST(t1.advertiser_account_id AS VARCHAR) = CAST(t2.id AS VARCHAR)  -- 确保数据类型匹配
+WHERE (COALESCE(t1.non_gift_consume::DOUBLE, 0) - COALESCE(t1.rebate_consume::DOUBLE, 0)) > 0.00001  -- 只保留结算消耗大于0的记录，处理NULL值
+GROUP BY t1.advertiser_account_id
+ORDER BY "结算消耗" DESC;
 """
 
     # 阶段4: 数据处理和导出
     log_stage("数据处理", "执行头条月结数据聚合和关联操作")
     output_excel_path = output_excel.replace("\\", "\\\\")
 
-    sql = sql_template.format(
-        toutiao_table=t_toutiao,
-        output_excel=output_excel_path
-    )
-
-    # 阶段5: SQL执行
-    log_stage("SQL执行", "执行头条月结数据处理和导出SQL")
+    # 首先检查account表是否存在
     try:
-        execute_sql_with_timing(conn, sql, f"[{entry_name}] 头条月结数据处理")
-        log_success(f"[{entry_name}] 头条月结结果已输出到: {output_excel}")
+        conn.execute("SELECT COUNT(*) FROM account")
+        result = conn.fetchone()[0]
+        log_info(f"[{entry_name}] account表包含 {result} 条记录")
     except Exception as e:
-        log_error(f"[{entry_name}] DuckDB执行失败: {e}")
+        log_warning(f"[{entry_name}] account表不存在或无法访问: {e}")
+        log_info(f"[{entry_name}] 将不进行客户名称关联，使用空值填充")
+        # 修改SQL模板，移除account表关联
+        sql_template = sql_template.replace(
+            'LEFT JOIN account AS t2 ON CAST(t1.advertiser_account_id AS VARCHAR) = CAST(t2.id AS VARCHAR)',
+            ''
+        ).replace(
+            'any_value(t2.n2) AS "客户名称",  -- 从媒体账户表获取客户名称',
+            'NULL AS "客户名称",  -- account表不存在，使用NULL'
+        )
+
+    # 执行数据汇总
+    sql = sql_template.format(toutiao_table=t_toutiao)
+    execute_sql_with_timing(conn, sql, f"[{entry_name}] 头条数据汇总")
+
+    # 检查最终数据量，决定输出策略
+    try:
+        conn.execute("SELECT COUNT(*) FROM t_toutiao_month_final")
+        final_row_count = conn.fetchone()[0]
+        log_info(f"[{entry_name}] 汇总后数据量: {final_row_count} 行")
+        
+        # 如果数据量超过50000行，考虑分sheet处理
+        if final_row_count > 50000:
+            log_info(f"[{entry_name}] 数据量较大({final_row_count}行)，将在单个Excel文件中创建多个sheet")
+            sheets_needed = (final_row_count + 49999) // 50000  # 每个sheet最多50000行
+            log_info(f"[{entry_name}] 预计需要 {sheets_needed} 个sheet")
+            
+            # 由于DuckDB的COPY命令限制，我们先分别导出为临时文件，然后合并
+            temp_files = []
+            
+            # 分批导出到临时文件
+            for sheet_num in range(sheets_needed):
+                offset = sheet_num * 50000
+                temp_file = output_excel.replace('.xlsx', f'_temp_sheet{sheet_num + 1}.xlsx')
+                temp_file_path = temp_file.replace("\\", "\\\\")
+                temp_files.append(temp_file)
+                
+                export_sql = f"""
+COPY
+  (SELECT "广告主账户id",
+          "客户名称",
+          "广告主公司名称", 
+          "共享子钱包名称",
+          "结算一级行业",
+          "结算二级行业",
+          "结算消耗"
+   FROM t_toutiao_month_final
+   LIMIT 50000 OFFSET {offset}) TO '{temp_file_path}' WITH (FORMAT xlsx, HEADER true);
+"""
+                
+                execute_sql_with_timing(conn, export_sql, f"[{entry_name}] 导出第{sheet_num + 1}个临时sheet")
+                log_info(f"[{entry_name}] 第{sheet_num + 1}个临时sheet已创建")
+            
+            # 保持分离的文件，不再尝试合并
+            log_info(f"[{entry_name}] 数据量较大，保持分离的Excel文件以避免合并问题")
+            log_info(f"[{entry_name}] 已创建 {len(temp_files)} 个分离的Excel文件")
+            
+            for i, temp_file in enumerate(temp_files, 1):
+                final_name = output_excel.replace('.xlsx', f'_part{i}.xlsx')
+                if os.path.exists(temp_file):
+                    try:
+                        os.rename(temp_file, final_name)
+                        log_success(f"[{entry_name}] 文件已重命名: {os.path.basename(final_name)}")
+                    except:
+                        log_warning(f"[{entry_name}] 无法重命名文件: {temp_file}")
+            
+            log_success(f"[{entry_name}] 头条月结数据已分离到 {sheets_needed} 个Excel文件，总计 {final_row_count} 行数据")
+                
+        else:
+            # 数据量不大，单个文件单个sheet输出
+            export_sql = f"""
+-- 导出头条月结数据
+COPY
+  (SELECT "广告主账户id",
+          "客户名称",
+          "广告主公司名称", 
+          "共享子钱包名称",
+          "结算一级行业",
+          "结算二级行业",
+          "结算消耗"
+   FROM t_toutiao_month_final) TO '{output_excel_path}' WITH (FORMAT xlsx, HEADER true);
+"""
+            execute_sql_with_timing(conn, export_sql, f"[{entry_name}] 导出头条月结数据")
+            log_success(f"[{entry_name}] 头条月结结果已输出到: {output_excel}")
+            
+    except Exception as export_e:
+        log_error(f"[{entry_name}] 数据导出失败: {export_e}")
         raise
+    
+    # 最终完成日志
+    log_stage("处理完成", f"头条月结数据处理完成，共处理 {final_row_count} 行数据")

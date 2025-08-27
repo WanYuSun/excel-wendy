@@ -58,18 +58,25 @@ def guangdiantong_v2_month_entry_handler(entry_dir: str, excels: List[str],
     try:
         from excel.union_sheets import union_sheets_concurrent
         
-        # 大端口数据字段可能更复杂，支持更多字段
+        # 大端口数据字段根据新需求调整，包含所有消耗类型
         projections = [
-            ('"账号ID"', 'account_id'),
+            ('"账户ID"', 'account_id'),
             ('"账户名称"', 'account_name'),
-            ('"账户总消耗"', 'total_cost'),
-            ('"总转入(元)"', 'total_in'),
-            ('"总转出(元)"', 'total_out'),
-            ('"资金类型"', 'fund_type'),
-            ('"资金账户名称"', 'fund_account_name'),
-            ('"主体名称"', 'entity_name'),
-            ('"客户名称"', 'client_name'),
-            ('"业务线"', 'business_line')
+            ('COALESCE("k框", "服务商简称")', 'k_box'),
+            ('"现金消耗（元）"', 'cash_consume'),
+            ('"信用金消耗（元）"', 'credit_consume'),
+            ('"赠送金消耗（元）"', 'gift_consume'),
+            ('"红包封面消耗"', 'red_envelope_consume'),
+            ('"微信内购赠送金消耗"', 'wechat_gift_consume'),
+            ('"微信内购快周转消耗"', 'wechat_quick_consume'),
+            ('"专用金消耗"', 'special_consume'),
+            ('"补偿虚拟金消耗"', 'compensation_consume'),
+            ('"安卓定向应用金消耗"', 'android_app_consume'),
+            ('"TCC赠送金消耗（微信广告）"', 'tcc_gift_consume'),
+            ('"微信专用小游戏抵用金消耗"', 'wechat_game_consume'),
+            ('"互选广告消耗"', 'mutual_ad_consume'),
+            ('"流量主广告金消耗"', 'traffic_ad_consume'),
+            ('"短剧内购赠送金消耗"', 'drama_gift_consume')
         ]
         
         union_sheets_concurrent(
@@ -85,76 +92,161 @@ def guangdiantong_v2_month_entry_handler(entry_dir: str, excels: List[str],
         log_error(f"[{entry_name}] 大端口月结数据加载失败: {e}")
         return
 
-    # SQL模板，针对大端口月结数据优化
+    # SQL模板，针对大端口月结数据优化，使用新的消耗计算逻辑
     sql_template = """
--- 广点通大端口月结消耗+充值处理
+-- 广点通大端口月结数据处理
 
 DROP TABLE IF EXISTS t_guang_v2_month;
 
--- 数据预处理和清洗
+-- 数据预处理和清洗，计算结算消耗
+-- 结算消耗 = 现金消耗（元）+ 信用金消耗（元）+ 赠送金消耗（元）- 红包封面消耗 - 微信内购赠送金消耗 - 微信内购快周转消耗 - 专用金消耗 - 补偿虚拟金消耗 - 安卓定向应用金消耗 - TCC赠送金消耗（微信广告）- 微信专用小游戏抵用金消耗 - 互选广告消耗 - 流量主广告金消耗 - 短剧内购赠送金消耗
 CREATE TABLE t_guang_v2_month AS
-SELECT account_id AS "账号ID",
+SELECT account_id AS "账户ID",
        any_value(account_name) AS "账户名称",
-       any_value(entity_name) AS "主体名称",
-       any_value(client_name) AS "客户名称", 
-       any_value(business_line) AS "业务线",
-       sum(m_out) AS "消耗",
-       sum(m_in) AS "充值"
-FROM
-  (SELECT account_id,
-          account_name,
-          entity_name,
-          client_name,
-          business_line,
-          total_cost::DOUBLE AS m_out,
-          total_in::DOUBLE - total_out::DOUBLE AS m_in
-   FROM {table_name}
-   WHERE (abs(total_cost::DOUBLE) > 0.00001
-          OR abs(total_in::DOUBLE - total_out::DOUBLE) > 0.00001)
-     AND fund_type NOT IN ('虚拟金', '赠送金')
-     AND fund_account_name NOT IN ('内部领用金账户',
-                                   '专用赠送账户',
-                                   '测试账户'))
-GROUP BY ALL;
+       any_value(t2.n2) AS "客户名称",  -- 从媒体账户表获取客户名称
+       any_value(k_box) AS "k框",
+       sum(
+           COALESCE(cash_consume::DOUBLE, 0) + 
+           COALESCE(credit_consume::DOUBLE, 0) + 
+           COALESCE(gift_consume::DOUBLE, 0) - 
+           COALESCE(red_envelope_consume::DOUBLE, 0) - 
+           COALESCE(wechat_gift_consume::DOUBLE, 0) - 
+           COALESCE(wechat_quick_consume::DOUBLE, 0) - 
+           COALESCE(special_consume::DOUBLE, 0) - 
+           COALESCE(compensation_consume::DOUBLE, 0) - 
+           COALESCE(android_app_consume::DOUBLE, 0) - 
+           COALESCE(tcc_gift_consume::DOUBLE, 0) - 
+           COALESCE(wechat_game_consume::DOUBLE, 0) - 
+           COALESCE(mutual_ad_consume::DOUBLE, 0) - 
+           COALESCE(traffic_ad_consume::DOUBLE, 0) - 
+           COALESCE(drama_gift_consume::DOUBLE, 0)
+       ) AS "结算消耗"
+FROM {table_name} AS t1
+LEFT JOIN account AS t2 ON CAST(t1.account_id AS VARCHAR) = CAST(t2.id AS VARCHAR)
+WHERE (
+    COALESCE(cash_consume::DOUBLE, 0) + 
+    COALESCE(credit_consume::DOUBLE, 0) + 
+    COALESCE(gift_consume::DOUBLE, 0) - 
+    COALESCE(red_envelope_consume::DOUBLE, 0) - 
+    COALESCE(wechat_gift_consume::DOUBLE, 0) - 
+    COALESCE(wechat_quick_consume::DOUBLE, 0) - 
+    COALESCE(special_consume::DOUBLE, 0) - 
+    COALESCE(compensation_consume::DOUBLE, 0) - 
+    COALESCE(android_app_consume::DOUBLE, 0) - 
+    COALESCE(tcc_gift_consume::DOUBLE, 0) - 
+    COALESCE(wechat_game_consume::DOUBLE, 0) - 
+    COALESCE(mutual_ad_consume::DOUBLE, 0) - 
+    COALESCE(traffic_ad_consume::DOUBLE, 0) - 
+    COALESCE(drama_gift_consume::DOUBLE, 0)
+) > 0.00001
+GROUP BY account_id;
 
 -- 创建优化索引提升查询性能
-CREATE INDEX IF NOT EXISTS idx_account_id ON t_guang_v2_month("账号ID");
-
--- 导出大端口月结数据（包含更多维度信息）
-COPY
-  (SELECT t2.n1 AS "媒体账户主体",
-          t2.n2 AS "关联客户",
-          '{subentry_name}' AS "端口名称",
-          '月结-大端口' AS "数据类型",
-          t1."主体名称",
-          t1."客户名称",
-          t1."业务线",
-          t1."账号ID",
-          t1."账户名称",
-          t1."消耗",
-          t1."充值"
-   FROM t_guang_v2_month AS t1
-   LEFT JOIN account AS t2 ON t1."账号ID" = t2.id
-   ORDER BY t1."消耗" DESC) TO '{output_excel}' WITH (FORMAT xlsx,
-                                                     HEADER true);
+CREATE INDEX IF NOT EXISTS idx_account_id ON t_guang_v2_month("账户ID");
 """
     # 阶段4: 数据处理和导出
     log_stage("数据处理", "执行大端口月结数据聚合和关联操作")
     output_excel_path = output_excel.replace("\\", "\\\\")
     log_info(f"[{entry_name}] 输出路径: {output_excel_path}")
-    log_info(f"[{entry_name}] 使用已加载的account表进行关联")
+
+    # 首先检查account表是否存在
+    try:
+        conn.execute("SELECT COUNT(*) FROM account")
+        result = conn.fetchone()[0]
+        log_info(f"[{entry_name}] account表包含 {result} 条记录")
+    except Exception as e:
+        log_warning(f"[{entry_name}] account表不存在或无法访问: {e}")
+        log_info(f"[{entry_name}] 将不进行客户名称关联，使用空值填充")
+        # 修改SQL模板，移除account表关联
+        sql_template = sql_template.replace(
+            'LEFT JOIN account AS t2 ON CAST(t1.account_id AS VARCHAR) = CAST(t2.id AS VARCHAR)',
+            ''
+        ).replace(
+            'any_value(t2.n2) AS "客户名称",  -- 从媒体账户表获取客户名称',
+            'NULL AS "客户名称",  -- account表不存在，使用NULL'
+        )
 
     sql = sql_template.format(
         table_name=t_g2,
         output_excel=output_excel_path,
-        subentry_name=subentry_name,
     )
 
     # 阶段5: SQL执行
     log_stage("SQL执行", "执行大端口月结数据处理和导出SQL")
     try:
         execute_sql_with_timing(conn, sql, f"[{entry_name}] 广点通大端口月结数据处理")
-        log_success(f"[{entry_name}] 大端口月结结果已输出到: {output_excel}")
+        
+        # 检查最终数据量，决定输出策略
+        try:
+            conn.execute("SELECT COUNT(*) FROM t_guang_v2_month")
+            final_row_count = conn.fetchone()[0]
+            log_info(f"[{entry_name}] 汇总后数据量: {final_row_count} 行")
+            
+            # 如果数据量超过50000行，考虑分sheet处理
+            if final_row_count > 50000:
+                log_info(f"[{entry_name}] 数据量较大({final_row_count}行)，将在单个Excel文件中创建多个sheet")
+                sheets_needed = (final_row_count + 49999) // 50000  # 每个sheet最多50000行
+                log_info(f"[{entry_name}] 预计需要 {sheets_needed} 个sheet")
+                
+                # 由于DuckDB的COPY命令限制，我们先分别导出为临时文件
+                temp_files = []
+                
+                # 分批导出到临时文件
+                for sheet_num in range(sheets_needed):
+                    offset = sheet_num * 50000
+                    temp_file = output_excel.replace('.xlsx', f'_temp_sheet{sheet_num + 1}.xlsx')
+                    temp_file_path = temp_file.replace("\\", "\\\\")
+                    temp_files.append(temp_file)
+                    
+                    export_sql = f"""
+COPY
+  (SELECT "账户ID",
+          "账户名称",
+          "客户名称",
+          "k框",
+          "结算消耗"
+   FROM t_guang_v2_month
+   LIMIT 50000 OFFSET {offset}) TO '{temp_file_path}' WITH (FORMAT xlsx, HEADER true);
+"""
+                    
+                    execute_sql_with_timing(conn, export_sql, f"[{entry_name}] 导出第{sheet_num + 1}个临时sheet")
+                    log_info(f"[{entry_name}] 第{sheet_num + 1}个临时sheet已创建")
+                
+                # 保持分离的文件，不再尝试合并
+                log_info(f"[{entry_name}] 数据量较大，保持分离的Excel文件以避免合并问题")
+                log_info(f"[{entry_name}] 已创建 {len(temp_files)} 个分离的Excel文件")
+                
+                for i, temp_file in enumerate(temp_files, 1):
+                    final_name = output_excel.replace('.xlsx', f'_part{i}.xlsx')
+                    if os.path.exists(temp_file):
+                        try:
+                            os.rename(temp_file, final_name)
+                            log_success(f"[{entry_name}] 文件已重命名: {os.path.basename(final_name)}")
+                        except:
+                            log_warning(f"[{entry_name}] 无法重命名文件: {temp_file}")
+                
+                log_success(f"[{entry_name}] 广点通大端口月结数据已分离到 {sheets_needed} 个Excel文件，总计 {final_row_count} 行数据")
+                    
+            else:
+                # 数据量不大，单个文件单个sheet输出
+                export_sql = f"""
+-- 导出大端口月结数据
+COPY
+  (SELECT "账户ID",
+          "账户名称",
+          "客户名称",
+          "k框",
+          "结算消耗"
+   FROM t_guang_v2_month
+   ORDER BY "结算消耗" DESC) TO '{output_excel_path}' WITH (FORMAT xlsx, HEADER true);
+"""
+                execute_sql_with_timing(conn, export_sql, f"[{entry_name}] 导出广点通大端口月结数据")
+                log_success(f"[{entry_name}] 大端口月结结果已输出到: {output_excel}")
+                
+        except Exception as export_e:
+            log_error(f"[{entry_name}] 数据导出失败: {export_e}")
+            raise
+        
     except Exception as e:
         log_error(f"[{entry_name}] DuckDB执行失败: {e}")
         raise
