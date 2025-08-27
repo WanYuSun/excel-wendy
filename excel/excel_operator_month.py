@@ -1,60 +1,38 @@
 """
-excel_operator.py
+excel_operator_month.py
 
-一个用于在子目录中批量处理Excel文件并用DuckDB分析的跨平台工具。
+专用于月结数据处理的Excel操作程序
 
 使用说明:
 1. 程序执行路径要求
    - 请在包含若干子目录的主目录下运行本程序。
    - 每个子目录作为一个处理入口，子目录名称即为入口名。
-   - 推荐将本脚本放在这些子目录的上一级目录下执行。
 
-2. 预期输入
-   ===== 周结数据 =====
-   - 每个子目录下应包含若干Excel文件（.xlsx）。
-   - "广点通"入口要求子目录下有：
-     - 主数据文件，文件名格式如：广点通1234xxxx.xlsx（数字开头）
-     - 账户文件，文件名格式如：xxxx账号列表.xlsx
-   - "快手"入口要求子目录下有：
-     - 消耗文件，文件名格式如：快手消耗1234xxxx.xlsx（数字开头）
-     - 充值文件，文件名格式如：快手充值1234xxxx.xlsx（数字开头）
-   - "头条"入口要求子目录下有：
-     - 消耗文件，文件名格式如：头条消耗_\d+xxxx.xlsx
-     - 充值文件，文件名格式如：头条充值_\d+xxxx.xlsx
-     - 共享钱包流水文件，文件名格式如：头条共享钱包流水下载_\d+xxxx.xlsx
-   - 若缺少上述任一文件，该子目录将跳过处理，并在日志中提示。
-
-   ===== 月结数据 =====
+2. 预期输入 - 月结数据
    - 月结数据目录结构包含以下媒体平台：
-     
+   
    子目录结构：
    - 6月综媒/：包含多个媒体平台的消耗数据
      * B站信息流消耗.xlsx, B站带货起飞消耗.xlsx, B站花火业务消耗.xlsx
      * UDfinish亮碟.xls, UD薇婷.xls, UD一本图书.xls, UD开心图书.xls
      * 多多进宝.xlsx, 汇川小牛.xlsx, 汇川潇牛.xlsx
      * 京准通.xls, 小红书消耗.xlsx, 支付宝消耗.xlsx, 变现猫消耗.xls
-     * 趣头条消耗-不做.xlsx, 趣头条赔付充值-不做.xlsx（自动跳过处理）
    
    - 快手/：快手平台相关数据
      * 快手小牛.xlsx, 快手金牛全站.xlsx, 快手金牛非全站.xlsx
-     * 快手大健康智投-千尚.xlsx, 快手小牛金牛非全站.xlsx
-     * 快手大健康金牛全站-执象.xlsx, 快手大健康金牛非全站-千尚.xlsx
-     * 快手大健康金牛非全站-执象.xlsx
    
    - 头条/：头条平台数据
      * 头条-小牛.xlsx, 头条-赛搜全部消耗.xlsx
    
    - 广点通/：广点通平台数据
      * 广点通-乐推.xlsx, 广点通-多盟.xlsx, 广点通-小牛.xlsx
-     * 广点通-微盟.xlsx, 广点通-腾易.xlsx
-     * 广点通-乐推日结(手工合并到乐推）.xlsx
    
    - 媒体账号列表.xlsx：账户信息文件
    
    各媒体字段映射：
    - 头条：广告主账户id → 广告主公司名称 → 共享子钱包名称 → 结算消耗 → 结算一级行业 → 结算二级行业
    - 快手：账户ID → 公司名称 → 结算消耗 → 一级行业 → 二级行业 → 账户类型
-   - 广点通：账户ID → 账户名称 → 共享钱包名称 → 结算消耗 → k框
+   - 广点通：账户ID → 账户名称 → k框 → 结算消耗（复杂计算逻辑）
    - 小红书：子账户ID → 子账户名称 → 结算消耗
    - 支付宝：支付宝账号 → 商家名称 → 结算消耗
    - B站：账号id → 客户名称 → 结算消耗
@@ -63,37 +41,27 @@ excel_operator.py
    - 多多进宝：广告账户ID → 广告账户名称 → 结算消耗
    - 京准通：投放账户 → 结算消耗
    - 汇川：账户id → 客户名称 → 结算消耗 → 平台新客
-   
-   特别说明：
-   - "6月综媒"目录会自动识别并处理多个媒体平台文件
-   - 包含"不做"字样的文件会自动跳过处理
-   - 支持.xls和.xlsx两种格式文件
-   - 各媒体平台数据会统一格式后合并输出
 
 3. 输出位置
-   - 处理结果输出为Excel文件，命名格式为 output_{子目录名}.xlsx。
-   - 若同名文件已存在，则为 output_{子目录名}_2.xlsx、output_{子目录名}_3.xlsx 等。
+   - 处理结果输出为Excel文件，命名格式为 month_{子目录名}.xlsx。
+   - 大数据量会自动分表，创建多个文件如 month_{子目录名}_part1.xlsx 等。
    - 输出文件统一保存在各子目录的上一级目录（即主目录）下。
 
 功能:
-- 列出当前工作目录下所有子目录，每个子目录作为一个处理入口。
-- 对每个子目录，收集所有`.xlsx`文件。
-- 提供入口处理接口，可自定义处理逻辑。
-- 支持周结和月结两种处理模式
-- 全过程中文日志提示。
-- 兼容Windows和Linux。
+- 专门处理月结数据，数据量大，使用并发优化
+- 支持自动分表处理大数据量
+- 全过程中文日志提示
+- 兼容Windows和macOS
 
 依赖:
 - Python 3.7+
 - duckdb (`pip install duckdb`)
 
-可选: 打包为可执行文件
-    python -m pip install pyinstaller
-    pyinstaller --onefile excel_operator.py
+打包命令:
+    pyinstaller --onefile --name excel_operator_month excel_operator_month.py
 
 用法:
-    python excel_operator.py
-
+    双击运行可执行文件或: python excel_operator_month.py
 """
 
 import multiprocessing
@@ -106,12 +74,6 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 import duckdb
 
-# 导入周结处理器
-from excel.handlers.week.guangdiantong import guangdiantong_entry_handler as guangdiantong_week_handler
-from excel.handlers.week.guangdiantong_v2 import guangdiantong_v2_entry_handler as guangdiantong_v2_week_handler
-from excel.handlers.week.kuaishou import kuaishou_entry_handler as kuaishou_week_handler
-from excel.handlers.week.toutiao import toutiao_entry_handler as toutiao_week_handler
-
 # 导入月结处理器
 from excel.handlers.month.guangdiantong import guangdiantong_month_entry_handler
 from excel.handlers.month.guangdiantong_v2 import guangdiantong_v2_month_entry_handler
@@ -123,24 +85,14 @@ from excel.handlers.month.zongmei import zongmei_month_entry_handler
 from excel.log import (setup_logging, log_success, log_error, log_info,
                        log_warning, log_stage, log_progress, execute_sql_with_timing)
 
-# 日志配置将在main函数中设置，以便使用正确的工作目录
-
 # 导入本地select模块
 try:
     from excel.select_excels import select_from_excel
-
-    log_success("成功导入select模块")
-except ImportError as e:
-    log_error(f"导入select模块失败: {e}")
-    sys.exit(1)
-
-# 导入union-sheets.py中的函数（用于account表加载）
-try:
     from excel.union_sheets import union_sheets_concurrent, unique_keys
-
-    log_success("成功导入union-sheets模块")
+    print("✓ 成功导入必要模块")
 except ImportError as e:
-    log_error(f"导入union-sheets模块失败: {e}")
+    print(f"✗ 导入模块失败: {e}")
+    input("按回车键退出...")
     sys.exit(1)
 
 
@@ -174,15 +126,7 @@ def list_excels(entry_dir: str) -> List[str]:
 
 # 入口处理函数类型定义
 EntryHandler = Callable[[str, List[str], duckdb.DuckDBPyConnection], None]
-week_entry_registry: Dict[str, EntryHandler] = {}
 month_entry_registry: Dict[str, EntryHandler] = {}
-
-
-def register_week_entry(name: str, handler: EntryHandler):
-    """
-    注册周结入口处理函数
-    """
-    week_entry_registry[name] = handler
 
 
 def register_month_entry(name: str, handler: EntryHandler):
@@ -193,58 +137,40 @@ def register_month_entry(name: str, handler: EntryHandler):
 
 
 def handle_entry(entry_name: str, entry_dir: str, excels: List[str],
-                 conn: duckdb.DuckDBPyConnection, processing_type: str):
+                 conn: duckdb.DuckDBPyConnection):
     """
     调用指定入口名的处理函数
-    支持entry_name形式：entry 或 entry-subentry
-    使用startswith匹配handler_key
-    
-    Args:
-        entry_name: 入口名称
-        entry_dir: 入口目录路径
-        excels: Excel文件列表
-        conn: DuckDB连接对象
-        processing_type: 处理类型 ('week' 或 'month')
     """
-    log_stage("入口处理", f"开始处理入口: {entry_name} (类型: {processing_type})")
+    log_stage("入口处理", f"开始处理月结入口: {entry_name}")
 
-    # 根据处理类型选择注册表
-    entry_registry = week_entry_registry if processing_type == 'week' else month_entry_registry
-    
     handler = None
     matched_key = None
 
     # 首先尝试精确匹配
-    if entry_name in entry_registry:
-        handler = entry_registry[entry_name]
+    if entry_name in month_entry_registry:
+        handler = month_entry_registry[entry_name]
         matched_key = entry_name
     else:
         # 如果精确匹配失败，尝试startswith匹配
-        for handler_key in entry_registry:
+        for handler_key in month_entry_registry:
             if entry_name.startswith(handler_key):
-                handler = entry_registry[handler_key]
+                handler = month_entry_registry[handler_key]
                 matched_key = handler_key
                 break
 
     if not handler:
-        log_warning(f"未注册{processing_type}入口处理器: '{entry_name}'")
+        log_warning(f"未注册月结入口处理器: '{entry_name}'")
         return
 
-    log_info(f"[{entry_name}] 使用{processing_type}处理器: {matched_key}")
+    log_info(f"[{entry_name}] 使用月结处理器: {matched_key}")
 
     try:
         handler(entry_dir, excels, conn)
-        log_success(f"[{entry_name}] {processing_type}入口处理完成")
+        log_success(f"[{entry_name}] 月结入口处理完成")
     except Exception as e:
-        log_error(f"[{entry_name}] {processing_type}入口处理失败: {e}")
+        log_error(f"[{entry_name}] 月结入口处理失败: {e}")
         raise
 
-
-# 注册周结处理器
-register_week_entry("广点通", guangdiantong_week_handler)
-register_week_entry("广点通-大端口", guangdiantong_v2_week_handler)
-register_week_entry("快手", kuaishou_week_handler)
-register_week_entry("头条", toutiao_week_handler)
 
 # 注册月结处理器
 register_month_entry("广点通", guangdiantong_month_entry_handler)
@@ -254,69 +180,72 @@ register_month_entry("头条", toutiao_month_entry_handler)
 register_month_entry("6月综媒", zongmei_month_entry_handler)
 
 
-def select_processing_type() -> str:
+def load_account_table(conn: duckdb.DuckDBPyConnection, base_dir: str) -> bool:
     """
-    让用户选择处理类型：周结或月结
-    
-    Returns:
-        str: 'week' 或 'month'
-    """
-    log_stage("处理类型选择", "请选择数据处理类型")
-    
-    while True:
-        print("\n请选择数据处理类型:")
-        print("1. 周结数据处理 (数据量较小，处理速度快)")
-        print("2. 月结数据处理 (数据量较大，使用并发优化)")
-        print("3. 退出程序")
-        
-        choice = input("\n请输入选项编号 (1/2/3): ").strip()
-        
-        if choice == '1':
-            log_success("选择周结数据处理模式")
-            return 'week'
-        elif choice == '2':
-            log_success("选择月结数据处理模式")
-            return 'month'
-        elif choice == '3':
-            log_info("用户选择退出程序")
-            return 'exit'
-        else:
-            print("无效选择，请输入 1、2 或 3")
-
-
-def load_account_table(conn: duckdb.DuckDBPyConnection) -> bool:
-    """
-    加载account表的函数
-
-    Args:
-        conn: DuckDB连接对象
-
-    Returns:
-        bool: 是否成功加载account表
+    加载account表的函数，默认从可执行文件所在目录查找媒体账户Excel文件
     """
     log_stage("账户表加载", "准备加载媒体账户表")
 
-    # 询问用户是否加载account表
-    while True:
-        choice = input("是否加载媒体账户表(account)？(y/n): ").strip().lower()
-        if choice in ['y', 'yes', '是']:
-            break
-        elif choice in ['n', 'no', '否']:
-            log_info("跳过加载account表")
-            return False
-        else:
-            print("请输入 y/yes/是 或 n/no/否")
+    # 在可执行文件所在目录查找媒体账户文件
+    potential_files = []
+    try:
+        for file in os.listdir(base_dir):
+            if (file.lower().endswith('.xlsx') and 
+                ('媒体账户' in file or '媒体账号' in file or '账户列表' in file or '账号列表' in file)):
+                potential_files.append(file)
+    except Exception as e:
+        log_error(f"扫描目录失败: {e}")
+        return False
 
-    # 提示用户输入媒体账户Excel文件的绝对路径
-    log_stage("文件选择", "选择媒体账户Excel文件")
-    while True:
-        excel_file = input("请输入媒体账户Excel文件的绝对路径: ").strip().strip('"\'')
-        if (os.path.exists(excel_file) and
-                excel_file.lower().endswith('.xlsx')):
-            log_success(f"选择文件: {os.path.basename(excel_file)}")
-            break
-        else:
-            print("文件不存在或不是Excel文件，请重新输入")
+    excel_file = None
+    
+    if len(potential_files) == 0:
+        log_warning("未在可执行文件所在目录找到媒体账户Excel文件")
+        log_info("提示：文件名应包含'媒体账户'、'媒体账号'、'账户列表'或'账号列表'等关键词")
+        
+        # 询问用户是否手动输入路径
+        while True:
+            choice = input("是否手动输入媒体账户Excel文件路径？(y/n): ").strip().lower()
+            if choice in ['y', 'yes', '是']:
+                break
+            elif choice in ['n', 'no', '否']:
+                log_info("跳过加载account表")
+                return False
+            else:
+                print("请输入 y/yes/是 或 n/no/否")
+        
+        # 提示用户输入媒体账户Excel文件的绝对路径
+        log_stage("文件选择", "选择媒体账户Excel文件")
+        while True:
+            excel_file = input("请输入媒体账户Excel文件的绝对路径: ").strip().strip('"\'')
+            if (os.path.exists(excel_file) and
+                    excel_file.lower().endswith('.xlsx')):
+                log_success(f"选择文件: {os.path.basename(excel_file)}")
+                break
+            else:
+                print("文件不存在或不是Excel文件，请重新输入")
+                
+    elif len(potential_files) == 1:
+        excel_file = os.path.join(base_dir, potential_files[0])
+        log_success(f"自动找到媒体账户文件: {potential_files[0]}")
+        
+    else:
+        log_info(f"发现多个可能的媒体账户文件: {potential_files}")
+        print("发现多个可能的媒体账户文件:")
+        for i, file in enumerate(potential_files, 1):
+            print(f"  {i}. {file}")
+        
+        while True:
+            try:
+                choice = int(input(f"请选择要使用的文件 (1-{len(potential_files)}): ").strip())
+                if 1 <= choice <= len(potential_files):
+                    excel_file = os.path.join(base_dir, potential_files[choice-1])
+                    log_success(f"选择文件: {potential_files[choice-1]}")
+                    break
+                else:
+                    print(f"请输入 1 到 {len(potential_files)} 之间的数字")
+            except ValueError:
+                print("请输入有效的数字")
 
     try:
         log_stage("数据加载", f"开始加载account表，Excel文件: {excel_file}")
@@ -379,14 +308,13 @@ def load_account_table(conn: duckdb.DuckDBPyConnection) -> bool:
 
 def main():
     """
-    主函数:
-    - 用户选择处理类型（周结或月结）
-    - 获取当前工作目录
-    - 列出所有子目录
-    - 加载account表
-    - 对每个子目录，列出Excel文件并用对应类型的处理器处理
+    月结数据处理主函数
     """
-    log_stage("程序启动", "Excel操作程序开始运行")
+    print("=" * 60)
+    print("    Excel月结数据处理程序")
+    print("    专门处理月结数据，数据量大，使用并发优化")
+    print("=" * 60)
+    print()
 
     # 获取可执行文件所在目录作为工作目录
     if getattr(sys, 'frozen', False):
@@ -399,8 +327,10 @@ def main():
         base_dir = os.getcwd()
 
     # 设置统一的日志配置，在确定工作目录后
-    log_file_path = os.path.join(base_dir, "excel_operator.log")
+    log_file_path = os.path.join(base_dir, "excel_month.log")
     logger = setup_logging(log_file=log_file_path)
+    
+    log_stage("程序启动", "Excel月结数据处理程序开始运行")
     
     if getattr(sys, 'frozen', False):
         log_info(f"检测到打包环境，可执行文件路径: {sys.executable}")
@@ -408,35 +338,27 @@ def main():
         log_success(f"已自动切换到可执行文件所在目录: {base_dir}")
     else:
         log_info(f"检测到脚本环境，使用当前工作目录: {base_dir}")
-
-    # 让用户选择处理类型
-    processing_type = select_processing_type()
-    if processing_type == 'exit':
-        log_info("程序退出")
-        return
     
     log_info(f"最终工作目录: {base_dir}")
-    log_info(f"处理类型: {'周结' if processing_type == 'week' else '月结'}")
+    log_info("处理类型: 月结数据")
     entries = list_process_entries(base_dir)
 
     # 创建一个全局DuckDB连接，供所有处理器使用
     log_stage("数据库初始化", "初始化DuckDB数据库连接")
-    db_name = f"excel_{processing_type}.db"
-    db_path = os.path.join(base_dir, db_name)  # 使用base_dir而不是当前工作目录
+    db_path = os.path.join(base_dir, "excel_month.db")
     log_info(f"数据库路径: {db_path}")
     global_conn = duckdb.connect(database=db_path)
     log_success("DuckDB连接创建成功")
 
     try:
-        # 询问并加载account表
-        account_loaded = load_account_table(global_conn)
+        # 自动加载account表
+        account_loaded = load_account_table(global_conn, base_dir)
 
         if not account_loaded:
             log_warning("未加载account表，某些功能可能受限")
 
         # 处理所有入口
-        processing_desc = "周结" if processing_type == 'week' else "月结"
-        log_stage("批量处理", f"开始{processing_desc}处理 {len(entries)} 个入口")
+        log_stage("批量处理", f"开始月结处理 {len(entries)} 个入口")
         processed_count = 0
         failed_count = 0
 
@@ -445,16 +367,16 @@ def main():
                 log_progress(i, len(entries), f"处理入口: {os.path.basename(entry_dir)}")
                 excels = list_excels(entry_dir)
                 entry_name = os.path.basename(entry_dir)
-                handle_entry(entry_name, entry_dir, excels, global_conn, processing_type)
+                handle_entry(entry_name, entry_dir, excels, global_conn)
                 processed_count += 1
-                log_success(f"入口 {entry_name} {processing_desc}处理完成")
+                log_success(f"入口 {entry_name} 月结处理完成")
             except Exception as e:
                 failed_count += 1
-                log_error(f"入口 {os.path.basename(entry_dir)} {processing_desc}处理失败: {e}")
+                log_error(f"入口 {os.path.basename(entry_dir)} 月结处理失败: {e}")
                 continue
 
         # 处理结果汇总
-        log_stage("处理完成", f"所有{processing_desc}入口处理完毕")
+        log_stage("处理完成", f"所有月结入口处理完毕")
         log_info(f"处理结果: 成功 {processed_count} 个，失败 {failed_count} 个")
 
         if processed_count > 0:
@@ -471,6 +393,9 @@ def main():
         global_conn.close()
         log_success("DuckDB连接已关闭")
         log_info("程序运行结束")
+        
+        # 等待用户按键后退出
+        input("\n按回车键退出程序...")
 
 
 if __name__ == "__main__":
