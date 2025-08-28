@@ -134,48 +134,48 @@ def guangdiantong_month_entry_handler(entry_dir: str, excels: List[str],
 
 DROP TABLE IF EXISTS t_guangdiantong_month_final;
 
--- 汇总广点通消耗数据，按账户ID分组，计算结算消耗
+-- 汇总广点通消耗数据，按账户ID分组，先聚合各项消耗，然后计算结算消耗
 -- 结算消耗 = 现金消耗（元）+ 信用金消耗（元）+ 赠送金消耗（元）- 红包封面消耗 - 微信内购赠送金消耗 - 微信内购快周转消耗 - 专用金消耗 - 补偿虚拟金消耗 - 安卓定向应用金消耗 - TCC赠送金消耗（微信广告）- 微信专用小游戏抵用金消耗 - 互选广告消耗 - 流量主广告金消耗 - 短剧内购赠送金消耗
 CREATE TABLE t_guangdiantong_month_final AS
 SELECT account_id AS "账户ID",
        any_value(account_name) AS "账户名称",
        any_value(t2.n2) AS "客户名称",  -- 从媒体账户表获取客户名称
        any_value(k_box) AS "k框",
-       sum(
-           COALESCE(cash_consume::DOUBLE, 0) + 
-           COALESCE(credit_consume::DOUBLE, 0) + 
-           COALESCE(gift_consume::DOUBLE, 0) - 
-           COALESCE(red_envelope_consume::DOUBLE, 0) - 
-           COALESCE(wechat_gift_consume::DOUBLE, 0) - 
-           COALESCE(wechat_quick_consume::DOUBLE, 0) - 
-           COALESCE(special_consume::DOUBLE, 0) - 
-           COALESCE(compensation_consume::DOUBLE, 0) - 
-           COALESCE(android_app_consume::DOUBLE, 0) - 
-           COALESCE(tcc_gift_consume::DOUBLE, 0) - 
-           COALESCE(wechat_game_consume::DOUBLE, 0) - 
-           COALESCE(mutual_ad_consume::DOUBLE, 0) - 
-           COALESCE(traffic_ad_consume::DOUBLE, 0) - 
-           COALESCE(drama_gift_consume::DOUBLE, 0)
+       (
+           sum(COALESCE(cash_consume::DOUBLE, 0)) + 
+           sum(COALESCE(credit_consume::DOUBLE, 0)) + 
+           sum(COALESCE(gift_consume::DOUBLE, 0)) - 
+           sum(COALESCE(red_envelope_consume::DOUBLE, 0)) - 
+           sum(COALESCE(wechat_gift_consume::DOUBLE, 0)) - 
+           sum(COALESCE(wechat_quick_consume::DOUBLE, 0)) - 
+           sum(COALESCE(special_consume::DOUBLE, 0)) - 
+           sum(COALESCE(compensation_consume::DOUBLE, 0)) - 
+           sum(COALESCE(android_app_consume::DOUBLE, 0)) - 
+           sum(COALESCE(tcc_gift_consume::DOUBLE, 0)) - 
+           sum(COALESCE(wechat_game_consume::DOUBLE, 0)) - 
+           sum(COALESCE(mutual_ad_consume::DOUBLE, 0)) - 
+           sum(COALESCE(traffic_ad_consume::DOUBLE, 0)) - 
+           sum(COALESCE(drama_gift_consume::DOUBLE, 0))
        ) AS "结算消耗"
 FROM {guangdiantong_table} AS t1
 LEFT JOIN account AS t2 ON CAST(t1.account_id AS VARCHAR) = CAST(t2.id AS VARCHAR)
-WHERE (
-    COALESCE(cash_consume::DOUBLE, 0) + 
-    COALESCE(credit_consume::DOUBLE, 0) + 
-    COALESCE(gift_consume::DOUBLE, 0) - 
-    COALESCE(red_envelope_consume::DOUBLE, 0) - 
-    COALESCE(wechat_gift_consume::DOUBLE, 0) - 
-    COALESCE(wechat_quick_consume::DOUBLE, 0) - 
-    COALESCE(special_consume::DOUBLE, 0) - 
-    COALESCE(compensation_consume::DOUBLE, 0) - 
-    COALESCE(android_app_consume::DOUBLE, 0) - 
-    COALESCE(tcc_gift_consume::DOUBLE, 0) - 
-    COALESCE(wechat_game_consume::DOUBLE, 0) - 
-    COALESCE(mutual_ad_consume::DOUBLE, 0) - 
-    COALESCE(traffic_ad_consume::DOUBLE, 0) - 
-    COALESCE(drama_gift_consume::DOUBLE, 0)
-) > 0.00001
-GROUP BY account_id;
+GROUP BY account_id
+HAVING (
+    sum(COALESCE(cash_consume::DOUBLE, 0)) + 
+    sum(COALESCE(credit_consume::DOUBLE, 0)) + 
+    sum(COALESCE(gift_consume::DOUBLE, 0)) - 
+    sum(COALESCE(red_envelope_consume::DOUBLE, 0)) - 
+    sum(COALESCE(wechat_gift_consume::DOUBLE, 0)) - 
+    sum(COALESCE(wechat_quick_consume::DOUBLE, 0)) - 
+    sum(COALESCE(special_consume::DOUBLE, 0)) - 
+    sum(COALESCE(compensation_consume::DOUBLE, 0)) - 
+    sum(COALESCE(android_app_consume::DOUBLE, 0)) - 
+    sum(COALESCE(tcc_gift_consume::DOUBLE, 0)) - 
+    sum(COALESCE(wechat_game_consume::DOUBLE, 0)) - 
+    sum(COALESCE(mutual_ad_consume::DOUBLE, 0)) - 
+    sum(COALESCE(traffic_ad_consume::DOUBLE, 0)) - 
+    sum(COALESCE(drama_gift_consume::DOUBLE, 0))
+) > 0.00001;
 """
 
     # 阶段4: 数据处理和导出

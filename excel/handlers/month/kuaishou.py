@@ -280,7 +280,7 @@ def kuaishou_month_entry_handler(entry_dir: str, excels: List[str],
 
 DROP TABLE IF EXISTS t_kuaishou_month_final;
 
--- 汇总快手数据，计算结算消耗，并与媒体账户表关联
+-- 汇总快手数据，先按账户ID聚合各项花费，然后计算结算消耗，并与媒体账户表关联
 CREATE TABLE t_kuaishou_month_final AS
 SELECT t1.account_id AS "账户ID",
        any_value(t2.n2) AS "客户名称",  -- 从媒体账户表获取客户名称
@@ -288,13 +288,13 @@ SELECT t1.account_id AS "账户ID",
        any_value(t1.account_type) AS "账户类型",
        any_value(t1.industry_level1) AS "一级行业",
        any_value(t1.industry_level2) AS "二级行业",
-       sum(COALESCE(t1.cash_cost::DOUBLE, 0) + COALESCE(t1.credit_cost::DOUBLE, 0) + 
-           COALESCE(t1.front_rebate_cost::DOUBLE, 0) + COALESCE(t1.back_rebate_cost::DOUBLE, 0)) AS "结算消耗"  -- 结算消耗 = 四种花费之和，处理NULL值
+       (sum(COALESCE(t1.cash_cost::DOUBLE, 0)) + sum(COALESCE(t1.credit_cost::DOUBLE, 0)) + 
+        sum(COALESCE(t1.front_rebate_cost::DOUBLE, 0)) + sum(COALESCE(t1.back_rebate_cost::DOUBLE, 0))) AS "结算消耗"  -- 结算消耗 = 四种花费分别求和后相加
 FROM {kuaishou_table} AS t1
 LEFT JOIN account AS t2 ON CAST(t1.account_id AS VARCHAR) = CAST(t2.id AS VARCHAR)  -- 确保数据类型匹配
-WHERE (COALESCE(t1.cash_cost::DOUBLE, 0) + COALESCE(t1.credit_cost::DOUBLE, 0) + 
-       COALESCE(t1.front_rebate_cost::DOUBLE, 0) + COALESCE(t1.back_rebate_cost::DOUBLE, 0)) > 0.00001  -- 只保留结算消耗大于0的记录
 GROUP BY t1.account_id
+HAVING (sum(COALESCE(t1.cash_cost::DOUBLE, 0)) + sum(COALESCE(t1.credit_cost::DOUBLE, 0)) + 
+        sum(COALESCE(t1.front_rebate_cost::DOUBLE, 0)) + sum(COALESCE(t1.back_rebate_cost::DOUBLE, 0))) > 0.00001  -- 只保留结算消耗大于0的记录
 ORDER BY "结算消耗" DESC;
 """
 

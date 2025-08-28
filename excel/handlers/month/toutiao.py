@@ -127,19 +127,19 @@ def toutiao_month_entry_handler(entry_dir: str, excels: List[str],
 
 DROP TABLE IF EXISTS t_toutiao_month_final;
 
--- 汇总头条数据，计算结算消耗，并与媒体账户表关联
+-- 汇总头条数据，先按账户ID聚合各项消耗，然后计算结算消耗，并与媒体账户表关联
 CREATE TABLE t_toutiao_month_final AS
 SELECT t1.advertiser_account_id AS "广告主账户id",
        any_value(t1.advertiser_company_name) AS "广告主公司名称", 
        any_value(t1.shared_wallet_name) AS "共享子钱包名称",
        any_value(t2.n2) AS "客户名称",  -- 从媒体账户表获取客户名称
-       sum(COALESCE(t1.non_gift_consume::DOUBLE, 0) - COALESCE(t1.rebate_consume::DOUBLE, 0)) AS "结算消耗",  -- 结算消耗 = 非赠款消耗 - 返佣消耗，处理NULL值
+       (sum(COALESCE(t1.non_gift_consume::DOUBLE, 0)) - sum(COALESCE(t1.rebate_consume::DOUBLE, 0))) AS "结算消耗",  -- 结算消耗 = 非赠款消耗总和 - 返佣消耗总和
        any_value(t1.settle_industry_level1) AS "结算一级行业",
        any_value(t1.settle_industry_level2) AS "结算二级行业"
 FROM {toutiao_table} AS t1
 LEFT JOIN account AS t2 ON CAST(t1.advertiser_account_id AS VARCHAR) = CAST(t2.id AS VARCHAR)  -- 确保数据类型匹配
-WHERE (COALESCE(t1.non_gift_consume::DOUBLE, 0) - COALESCE(t1.rebate_consume::DOUBLE, 0)) > 0.00001  -- 只保留结算消耗大于0的记录，处理NULL值
 GROUP BY t1.advertiser_account_id
+HAVING (sum(COALESCE(t1.non_gift_consume::DOUBLE, 0)) - sum(COALESCE(t1.rebate_consume::DOUBLE, 0))) > 0.00001  -- 只保留结算消耗大于0的记录
 ORDER BY "结算消耗" DESC;
 """
 
