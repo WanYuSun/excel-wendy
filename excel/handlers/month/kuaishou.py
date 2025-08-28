@@ -293,8 +293,6 @@ SELECT t1.account_id AS "账户ID",
 FROM {kuaishou_table} AS t1
 LEFT JOIN account AS t2 ON CAST(t1.account_id AS VARCHAR) = CAST(t2.id AS VARCHAR)  -- 确保数据类型匹配
 GROUP BY t1.account_id
-HAVING (sum(COALESCE(t1.cash_cost::DOUBLE, 0)) + sum(COALESCE(t1.credit_cost::DOUBLE, 0)) + 
-        sum(COALESCE(t1.front_rebate_cost::DOUBLE, 0)) + sum(COALESCE(t1.back_rebate_cost::DOUBLE, 0))) > 0.00001  -- 只保留结算消耗大于0的记录
 ORDER BY "结算消耗" DESC;
 """
 

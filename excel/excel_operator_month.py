@@ -12,12 +12,6 @@ excel_operator_month.py
    - 月结数据目录结构包含以下媒体平台：
    
    子目录结构：
-   - 6月综媒/：包含多个媒体平台的消耗数据
-     * B站信息流消耗.xlsx, B站带货起飞消耗.xlsx, B站花火业务消耗.xlsx
-     * UDfinish亮碟.xls, UD薇婷.xls, UD一本图书.xls, UD开心图书.xls
-     * 多多进宝.xlsx, 汇川小牛.xlsx, 汇川潇牛.xlsx
-     * 京准通.xls, 小红书消耗.xlsx, 支付宝消耗.xlsx, 变现猫消耗.xls
-   
    - 快手/：快手平台相关数据
      * 快手小牛.xlsx, 快手金牛全站.xlsx, 快手金牛非全站.xlsx
    
@@ -33,14 +27,6 @@ excel_operator_month.py
    - 头条：广告主账户id → 广告主公司名称 → 共享子钱包名称 → 结算消耗 → 结算一级行业 → 结算二级行业
    - 快手：账户ID → 公司名称 → 结算消耗 → 一级行业 → 二级行业 → 账户类型
    - 广点通：账户ID → 账户名称 → k框 → 结算消耗（复杂计算逻辑）
-   - 小红书：子账户ID → 子账户名称 → 结算消耗
-   - 支付宝：支付宝账号 → 商家名称 → 结算消耗
-   - B站：账号id → 客户名称 → 结算消耗
-   - UDS：媒体投放账户id → 店铺名称 → 结算消耗
-   - 变现猫：广告主 → 结算消耗
-   - 多多进宝：广告账户ID → 广告账户名称 → 结算消耗
-   - 京准通：投放账户 → 结算消耗
-   - 汇川：账户id → 客户名称 → 结算消耗 → 平台新客
 
 3. 输出位置
    - 处理结果输出为Excel文件，命名格式为 month_{子目录名}.xlsx。
@@ -79,7 +65,6 @@ from excel.handlers.month.guangdiantong import guangdiantong_month_entry_handler
 from excel.handlers.month.guangdiantong_v2 import guangdiantong_v2_month_entry_handler
 from excel.handlers.month.kuaishou import kuaishou_month_entry_handler
 from excel.handlers.month.toutiao import toutiao_month_entry_handler
-from excel.handlers.month.zongmei import zongmei_month_entry_handler
 
 # 导入统一的日志模块
 from excel.log import (setup_logging, log_success, log_error, log_info,
@@ -177,7 +162,6 @@ register_month_entry("广点通", guangdiantong_month_entry_handler)
 register_month_entry("广点通-大端口", guangdiantong_v2_month_entry_handler)
 register_month_entry("快手", kuaishou_month_entry_handler)
 register_month_entry("头条", toutiao_month_entry_handler)
-register_month_entry("6月综媒", zongmei_month_entry_handler)
 
 
 def load_account_table(conn: duckdb.DuckDBPyConnection, base_dir: str) -> bool:

@@ -139,7 +139,6 @@ SELECT t1.advertiser_account_id AS "广告主账户id",
 FROM {toutiao_table} AS t1
 LEFT JOIN account AS t2 ON CAST(t1.advertiser_account_id AS VARCHAR) = CAST(t2.id AS VARCHAR)  -- 确保数据类型匹配
 GROUP BY t1.advertiser_account_id
-HAVING (sum(COALESCE(t1.non_gift_consume::DOUBLE, 0)) - sum(COALESCE(t1.rebate_consume::DOUBLE, 0))) > 0.00001  -- 只保留结算消耗大于0的记录
 ORDER BY "结算消耗" DESC;
 """
 

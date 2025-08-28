@@ -123,23 +123,7 @@ SELECT account_id AS "账户ID",
        ) AS "结算消耗"
 FROM {table_name} AS t1
 LEFT JOIN account AS t2 ON CAST(t1.account_id AS VARCHAR) = CAST(t2.id AS VARCHAR)
-GROUP BY account_id
-HAVING (
-    sum(COALESCE(cash_consume::DOUBLE, 0)) + 
-    sum(COALESCE(credit_consume::DOUBLE, 0)) + 
-    sum(COALESCE(gift_consume::DOUBLE, 0)) - 
-    sum(COALESCE(red_envelope_consume::DOUBLE, 0)) - 
-    sum(COALESCE(wechat_gift_consume::DOUBLE, 0)) - 
-    sum(COALESCE(wechat_quick_consume::DOUBLE, 0)) - 
-    sum(COALESCE(special_consume::DOUBLE, 0)) - 
-    sum(COALESCE(compensation_consume::DOUBLE, 0)) - 
-    sum(COALESCE(android_app_consume::DOUBLE, 0)) - 
-    sum(COALESCE(tcc_gift_consume::DOUBLE, 0)) - 
-    sum(COALESCE(wechat_game_consume::DOUBLE, 0)) - 
-    sum(COALESCE(mutual_ad_consume::DOUBLE, 0)) - 
-    sum(COALESCE(traffic_ad_consume::DOUBLE, 0)) - 
-    sum(COALESCE(drama_gift_consume::DOUBLE, 0))
-) > 0.00001;
+GROUP BY account_id;
 
 -- 创建优化索引提升查询性能
 CREATE INDEX IF NOT EXISTS idx_account_id ON t_guang_v2_month("账户ID");
