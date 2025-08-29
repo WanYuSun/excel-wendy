@@ -15,9 +15,9 @@ def kuaishou_month_entry_handler(entry_dir: str, excels: List[str],
     "快手"月结入口处理函数
     - 专门处理月结数据，数据量更大，sheet数量更多
     - 查找所需Excel文件（简化匹配规则，不再需要数字结尾）
-    - 字段映射：账户ID、公司名称、账户类型、一级行业、二级行业、现金花费(元)、信用花费(元)、前返花费(元)、后返花费(元)
+    - 字段储存：账户ID、公司名称、账户类型、一级行业、二级行业、用户自选类目、产品名、素材打标类目、框返花费(元)、总消耗、现金花费(元)、信用花费(元)、前返花费(元)、后返花费(元)
     - 与媒体账户表联合：快手中的账户ID 对应 媒体账户表的账号ID
-    - 最终输出：账户ID、客户名称、公司名称、账户类型、一级行业、二级行业、结算消耗
+    - 最终输出：客户名称、客户编号、公司名称、结算消耗、账户ID、账户类型、一级行业、二级行业、产品名、用户自选类目、素材打标类目、框返花费(元)、总消耗
     - 计算逻辑：结算消耗 = 现金花费(元) + 信用花费(元) + 前返花费(元) + 后返花费(元)
     """
     entry_name = os.path.basename(entry_dir)
@@ -132,45 +132,22 @@ def kuaishou_month_entry_handler(entry_dir: str, excels: List[str],
         ('"账户类型"', 'account_type'),
         ('"一级行业"', 'industry_level1'),
         ('"二级行业"', 'industry_level2'),
+        ('"用户自选类目"', 'user_choice_category'),
+        ('"产品名"', 'product_name'),
+        ('"素材打标类目"', 'material_label_category'),
+        ('"框返花费(元)"', 'frame_rebate_cost'),
+        ('"总消耗"', 'total_consume'),
         ('"现金花费(元)"', 'cash_cost'),
         ('"信用花费(元)"', 'credit_cost'),
         ('"前返花费(元)"', 'front_rebate_cost'),
         ('"后返花费(元)"', 'back_rebate_cost')
     ]
     
-    # 备用字段映射（如果原始字段名不匹配）
-    kuaishou_projections_backup = [
-        ('COALESCE("账户ID", "账户id")', 'account_id'),
-        ('COALESCE("公司名称", "账户名称")', 'company_name'),
-        ('COALESCE("账户类型", "类型")', 'account_type'),
-        ('COALESCE("一级行业", "行业")', 'industry_level1'),
-        ('"二级行业"', 'industry_level2'),
-        ('COALESCE("现金花费(元)", "现金花费", "现金消耗")', 'cash_cost'),
-        ('COALESCE("信用花费(元)", "信用花费", "信用消耗")', 'credit_cost'),
-        ('COALESCE("前返花费(元)", "前返花费")', 'front_rebate_cost'),
-        ('COALESCE("后返花费(元)", "后返花费")', 'back_rebate_cost')
-    ]
-    
-    # 第三套字段映射（更宽松的匹配）
-    kuaishou_projections_flexible = [
-        ('COALESCE("账户ID", "账户id", "账号ID", "账号id")', 'account_id'),
-        ('COALESCE("公司名称", "账户名称", "名称")', 'company_name'),
-        ('COALESCE("账户类型", "类型", "广告类型")', 'account_type'),
-        ('COALESCE("一级行业", "行业", "行业分类")', 'industry_level1'),
-        ('COALESCE("二级行业", "子行业")', 'industry_level2'),
-        ('COALESCE("现金花费(元)", "现金花费", "现金消耗", "现金成本")', 'cash_cost'),
-        ('COALESCE("信用花费(元)", "信用花费", "信用消耗", "信用成本")', 'credit_cost'),
-        ('COALESCE("前返花费(元)", "前返花费", "前返")', 'front_rebate_cost'),
-        ('COALESCE("后返花费(元)", "后返花费", "后返")', 'back_rebate_cost')
-    ]
-    
     t_kuaishou = 't_kuaishou_month'
     
     # 准备所有可用的字段映射策略
     projection_strategies = [
-        (kuaishou_projections, "主要字段映射"),
-        (kuaishou_projections_backup, "备用字段映射"),
-        (kuaishou_projections_flexible, "灵活字段映射")
+        (kuaishou_projections, "主要字段映射")
     ]
     
     try:
@@ -279,17 +256,22 @@ def kuaishou_month_entry_handler(entry_dir: str, excels: List[str],
 -- 快手月结数据处理：结算消耗 = 现金花费(元) + 信用花费(元) + 前返花费(元) + 后返花费(元)
 
 DROP TABLE IF EXISTS t_kuaishou_month_final;
-
 -- 汇总快手数据，先按账户ID聚合各项花费，然后计算结算消耗，并与媒体账户表关联
 CREATE TABLE t_kuaishou_month_final AS
 SELECT t1.account_id AS "账户ID",
        any_value(t2.n2) AS "客户名称",  -- 从媒体账户表获取客户名称
+       any_value(t2.n3) AS "客户编号",  -- 从媒体账户表获取客户编号
        any_value(t1.company_name) AS "公司名称",
+        (sum(COALESCE(t1.cash_cost::DOUBLE, 0)) + sum(COALESCE(t1.credit_cost::DOUBLE, 0)) + 
+        sum(COALESCE(t1.front_rebate_cost::DOUBLE, 0)) + sum(COALESCE(t1.back_rebate_cost::DOUBLE, 0))) AS "结算消耗",  -- 结算消耗 = 四种花费分别求和后相加
        any_value(t1.account_type) AS "账户类型",
        any_value(t1.industry_level1) AS "一级行业",
        any_value(t1.industry_level2) AS "二级行业",
-       (sum(COALESCE(t1.cash_cost::DOUBLE, 0)) + sum(COALESCE(t1.credit_cost::DOUBLE, 0)) + 
-        sum(COALESCE(t1.front_rebate_cost::DOUBLE, 0)) + sum(COALESCE(t1.back_rebate_cost::DOUBLE, 0))) AS "结算消耗"  -- 结算消耗 = 四种花费分别求和后相加
+       any_value(t1.product_name) AS "产品名",
+       any_value(t1.user_choice_category) AS "用户自选类目",
+       any_value(t1.material_label_category) AS "素材打标类目",
+       sum(COALESCE(t1.frame_rebate_cost::DOUBLE, 0)) AS "框返花费(元)",
+       sum(COALESCE(t1.total_consume::DOUBLE, 0)) AS "总消耗"
 FROM {kuaishou_table} AS t1
 LEFT JOIN account AS t2 ON CAST(t1.account_id AS VARCHAR) = CAST(t2.id AS VARCHAR)  -- 确保数据类型匹配
 GROUP BY t1.account_id
@@ -357,16 +339,21 @@ SELECT COUNT(*) as total_rows FROM (
                 temp_file = output_excel.replace('.xlsx', f'_temp_sheet{sheet_num + 1}.xlsx')
                 temp_file_path = temp_file.replace("\\", "\\\\")
                 temp_files.append(temp_file)
-                
                 export_sql = f"""
 COPY
-  (SELECT "账户ID",
-          "客户名称",
+  (SELECT "客户名称",
+          "客户编号",
           "公司名称",
+          "结算消耗",
+          "账户ID",
           "账户类型",
           "一级行业",
           "二级行业",
-          "结算消耗"
+          "产品名",
+          "用户自选类目",
+          "素材打标类目",
+          "框返花费(元)",
+          "总消耗"
    FROM t_kuaishou_month_final
    LIMIT 50000 OFFSET {offset}) TO '{temp_file_path}' WITH (FORMAT xlsx, HEADER true);
 """
@@ -394,13 +381,19 @@ COPY
             export_sql = f"""
 -- 导出快手月结数据
 COPY
-  (SELECT "账户ID",
-          "客户名称",
+  (SELECT "客户名称",
+          "客户编号",
           "公司名称",
+          "结算消耗",
+          "账户ID",
           "账户类型",
           "一级行业",
           "二级行业",
-          "结算消耗"
+          "产品名",
+          "用户自选类目",
+          "素材打标类目",
+          "框返花费(元)",
+          "总消耗"
    FROM t_kuaishou_month_final) TO '{output_excel_path}' WITH (FORMAT xlsx, HEADER true);
 """
             execute_sql_with_timing(conn, export_sql, f"[{entry_name}] 导出快手月结数据")

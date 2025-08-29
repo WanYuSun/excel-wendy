@@ -15,9 +15,9 @@ def toutiao_month_entry_handler(entry_dir: str, excels: List[str],
     "头条"月结入口处理函数
     - 专门处理月结数据，数据量更大，sheet数量更多
     - 查找所需Excel文件（简化匹配规则，不再需要数字结尾）
-    - 字段映射：广告主账户id、共享子钱包名称、非赠款消耗、返佣消耗、结算一级行业、结算二级行业
+    - 字段储存：广告主账户id、广告主账户名称、广告主公司名称、共享子钱包名称、非赠款消耗、返佣消耗、结算一级行业、结算二级行业、总消耗
     - 与媒体账户表联合：头条中的广告主账户id 对应 媒体账户表的账号ID
-    - 最终输出：客户名称、广告主账户id、广告主公司名称、共享子钱包名称、结算消耗、结算一级行业、结算二级行业
+    - 最终输出：客户名称、客户编号、广告主公司名称、结算消耗、账户ID、广告主账户id、广告主账户名称、共享子钱包名称、总消耗、结算一级行业、结算二级行业
     - 计算逻辑：结算消耗 = 非赠款消耗 - 返佣消耗
     """
     entry_name = os.path.basename(entry_dir)
@@ -72,12 +72,14 @@ def toutiao_month_entry_handler(entry_dir: str, excels: List[str],
     # 需要存储：广告主账户id、共享子钱包名称、非赠款消耗、返佣消耗、结算一级行业、结算二级行业
     toutiao_projections = [
         ('"广告主账户id"', 'advertiser_account_id'),
+        ('"广告主账户名称"', 'advertiser_account_name'),
         ('"广告主公司名称"', 'advertiser_company_name'),
         ('"共享子钱包名称"', 'shared_wallet_name'),
         ('"非赠款消耗"', 'non_gift_consume'),
-        ('"返佣消耗"', 'rebate_consume'), 
+        ('"返佣消耗"', 'rebate_consume'),
         ('"结算一级行业"', 'settle_industry_level1'),
-        ('"结算二级行业"', 'settle_industry_level2')
+        ('"结算二级行业"', 'settle_industry_level2'),
+        ('"总消耗"', 'total_consume')
     ]
     
     t_toutiao = 't_toutiao_month'
@@ -123,24 +125,25 @@ def toutiao_month_entry_handler(entry_dir: str, excels: List[str],
 
     # SQL模板：根据新需求调整汇总逻辑
     sql_template = """
--- 头条月结数据处理：结算消耗 = 非赠款消耗 - 返佣消耗
+    -- 头条月结数据处理
+    DROP TABLE IF EXISTS t_toutiao_month_final;
 
-DROP TABLE IF EXISTS t_toutiao_month_final;
-
--- 汇总头条数据，先按账户ID聚合各项消耗，然后计算结算消耗，并与媒体账户表关联
-CREATE TABLE t_toutiao_month_final AS
-SELECT t1.advertiser_account_id AS "广告主账户id",
-       any_value(t1.advertiser_company_name) AS "广告主公司名称", 
-       any_value(t1.shared_wallet_name) AS "共享子钱包名称",
-       any_value(t2.n2) AS "客户名称",  -- 从媒体账户表获取客户名称
-       (sum(COALESCE(t1.non_gift_consume::DOUBLE, 0)) - sum(COALESCE(t1.rebate_consume::DOUBLE, 0))) AS "结算消耗",  -- 结算消耗 = 非赠款消耗总和 - 返佣消耗总和
-       any_value(t1.settle_industry_level1) AS "结算一级行业",
-       any_value(t1.settle_industry_level2) AS "结算二级行业"
-FROM {toutiao_table} AS t1
-LEFT JOIN account AS t2 ON CAST(t1.advertiser_account_id AS VARCHAR) = CAST(t2.id AS VARCHAR)  -- 确保数据类型匹配
-GROUP BY t1.advertiser_account_id
-ORDER BY "结算消耗" DESC;
-"""
+    CREATE TABLE t_toutiao_month_final AS
+    SELECT t1.advertiser_account_id AS "广告主账户id",
+           any_value(t1.advertiser_company_name) AS "广告主公司名称",
+           any_value(t2.n2) AS "客户名称",  -- 客户名称
+           any_value(t2.n3) AS "客户编号",  -- 客户编号
+           (sum(COALESCE(t1.non_gift_consume::DOUBLE, 0)) - sum(COALESCE(t1.rebate_consume::DOUBLE, 0))) AS "结算消耗",
+           any_value(t1.advertiser_account_id) AS "账户ID",
+           any_value(t1.advertiser_account_name) AS "广告主账户名称",
+           any_value(t1.shared_wallet_name) AS "共享子钱包名称",
+           sum(COALESCE(t1.total_consume::DOUBLE, 0)) AS "总消耗",
+           any_value(t1.settle_industry_level1) AS "结算一级行业",
+           any_value(t1.settle_industry_level2) AS "结算二级行业"
+    FROM {toutiao_table} AS t1
+    LEFT JOIN account AS t2 ON CAST(t1.advertiser_account_id AS VARCHAR) = CAST(t2.id AS VARCHAR)
+    GROUP BY t1.advertiser_account_id;
+    """
 
     # 阶段4: 数据处理和导出
     log_stage("数据处理", "执行头条月结数据聚合和关联操作")
@@ -188,16 +191,20 @@ ORDER BY "结算消耗" DESC;
                 temp_file = output_excel.replace('.xlsx', f'_temp_sheet{sheet_num + 1}.xlsx')
                 temp_file_path = temp_file.replace("\\", "\\\\")
                 temp_files.append(temp_file)
-                
+
                 export_sql = f"""
 COPY
-  (SELECT "广告主账户id",
-          "客户名称",
-          "广告主公司名称", 
+  (SELECT "客户名称",
+          "客户编号",
+          "广告主公司名称",
+          "结算消耗",
+          "账户ID",
+          "广告主账户id",
+          "广告主账户名称",
           "共享子钱包名称",
+          "总消耗",
           "结算一级行业",
-          "结算二级行业",
-          "结算消耗"
+          "结算二级行业"
    FROM t_toutiao_month_final
    LIMIT 50000 OFFSET {offset}) TO '{temp_file_path}' WITH (FORMAT xlsx, HEADER true);
 """
@@ -225,14 +232,19 @@ COPY
             export_sql = f"""
 -- 导出头条月结数据
 COPY
-  (SELECT "广告主账户id",
-          "客户名称",
-          "广告主公司名称", 
+  (SELECT "客户名称",
+          "客户编号",
+          "广告主公司名称",
+          "结算消耗",
+          "账户ID",
+          "广告主账户id",
+          "广告主账户名称",
           "共享子钱包名称",
+          "总消耗",
           "结算一级行业",
-          "结算二级行业",
-          "结算消耗"
-   FROM t_toutiao_month_final) TO '{output_excel_path}' WITH (FORMAT xlsx, HEADER true);
+          "结算二级行业"
+   FROM t_toutiao_month_final
+   ORDER BY "结算消耗" DESC) TO '{output_excel_path}' WITH (FORMAT xlsx, HEADER true);
 """
             execute_sql_with_timing(conn, export_sql, f"[{entry_name}] 导出头条月结数据")
             log_success(f"[{entry_name}] 头条月结结果已输出到: {output_excel}")

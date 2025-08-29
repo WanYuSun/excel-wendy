@@ -239,7 +239,8 @@ def load_account_table(conn: duckdb.DuckDBPyConnection, base_dir: str) -> bool:
         projections = [
             ('"账号ID"', "id"),
             ('"媒体账户主体"', "n1"),
-            ('"客户名称"', "n2")
+            ('"客户名称"', "n2"),
+             ('"客户编号"', "n3")
         ]
 
         union_sheets_concurrent(
@@ -255,7 +256,8 @@ def load_account_table(conn: duckdb.DuckDBPyConnection, base_dir: str) -> bool:
         unique_projections = [
             ("id", None),
             ("any_value(n1)", "n1"),
-            ("any_value(n2)", "n2")
+            ("any_value(n2)", "n2"),
+            ("any_value(n3)", "n3")
         ]
 
         unique_keys(

@@ -15,8 +15,10 @@ def guangdiantong_month_entry_handler(entry_dir: str, excels: List[str],
     "广点通"月结入口处理函数
     - 专门处理月结数据，数据量更大，sheet数量更多
     - 查找所需Excel文件（简化匹配规则，不再需要数字结尾）
-    - 只处理消耗数据，不再区分充值和消耗
-    - 字段映射：账户ID、账户名称、共享钱包名称、结算消耗、k框
+    - 字段储存：客户名称、账户ID、服务商简称、账户名称、k框、广告主集团、总消耗、现金消耗（元）、信用金消耗（元）、赠送金消耗（元）、红包封面消耗、微信内购赠送金消耗、微信内购快周转消耗、专用金消耗、补偿虚拟金消耗、安卓定向应用金消耗、TCC赠送金消耗（微信广告）、微信专用小游戏抵用金消耗、互选广告消耗、流量主广告金消耗、短剧内购赠送金消耗
+    - 与媒体账户表联合：广点通中的账户ID 对应 媒体账户表的账号ID
+    - 最终输出：客户名称、客户编号、账户名称、结算消耗、账户ID、服务商简称、k框、广告主集团、总消耗
+    - 计算逻辑：结算消耗 = 现金消耗（元） + 信用金消耗（元） + 赠送金消耗（元） - 红包封面消耗 - 微信内购赠送金消耗 - 微信内购快周转消耗 - 专用金消耗 - 补偿虚拟金消耗 - 安卓定向应用金消耗 - TCC赠送金消耗（微信广告） - 微信专用小游戏抵用金消耗 - 互选广告消耗 - 流量主广告金消耗 - 短剧内购赠送金消耗
     """
     entry_name = os.path.basename(entry_dir)
     log_stage("广点通月结处理", f"开始处理广点通月结入口: {entry_name}")
@@ -69,8 +71,11 @@ def guangdiantong_month_entry_handler(entry_dir: str, excels: List[str],
     # 广点通字段映射：根据新需求调整字段，存储所有消耗类型
     guangdiantong_projections = [
         ('"账户ID"', 'account_id'),
+        ('"服务商简称"', 'service_provider_short_name'),
         ('"账户名称"', 'account_name'),
-        ('COALESCE("k框", "服务商简称")', 'k_box'),  # 使用服务商简称作为k框的备选
+        ('"k框"', 'k_box'),
+        ('"广告主集团"', 'advertiser_group'),
+        ('"总消耗"', 'total_consume'),
         ('"现金消耗（元）"', 'cash_consume'),
         ('"信用金消耗（元）"', 'credit_consume'),
         ('"赠送金消耗（元）"', 'gift_consume'),
@@ -127,7 +132,6 @@ def guangdiantong_month_entry_handler(entry_dir: str, excels: List[str],
     except Exception as e:
         log_error(f"[{entry_name}] 广点通数据加载失败: {e}")
         return
-
     # SQL模板，根据新需求调整汇总逻辑
     sql_template = """
 -- 广点通月结数据处理（根据新消耗计算逻辑）
@@ -137,26 +141,30 @@ DROP TABLE IF EXISTS t_guangdiantong_month_final;
 -- 汇总广点通消耗数据，按账户ID分组，先聚合各项消耗，然后计算结算消耗
 -- 结算消耗 = 现金消耗（元）+ 信用金消耗（元）+ 赠送金消耗（元）- 红包封面消耗 - 微信内购赠送金消耗 - 微信内购快周转消耗 - 专用金消耗 - 补偿虚拟金消耗 - 安卓定向应用金消耗 - TCC赠送金消耗（微信广告）- 微信专用小游戏抵用金消耗 - 互选广告消耗 - 流量主广告金消耗 - 短剧内购赠送金消耗
 CREATE TABLE t_guangdiantong_month_final AS
-SELECT account_id AS "账户ID",
-       any_value(account_name) AS "账户名称",
-       any_value(t2.n2) AS "客户名称",  -- 从媒体账户表获取客户名称
-       any_value(k_box) AS "k框",
-       (
-           sum(COALESCE(cash_consume::DOUBLE, 0)) + 
-           sum(COALESCE(credit_consume::DOUBLE, 0)) + 
-           sum(COALESCE(gift_consume::DOUBLE, 0)) - 
-           sum(COALESCE(red_envelope_consume::DOUBLE, 0)) - 
-           sum(COALESCE(wechat_gift_consume::DOUBLE, 0)) - 
-           sum(COALESCE(wechat_quick_consume::DOUBLE, 0)) - 
-           sum(COALESCE(special_consume::DOUBLE, 0)) - 
-           sum(COALESCE(compensation_consume::DOUBLE, 0)) - 
-           sum(COALESCE(android_app_consume::DOUBLE, 0)) - 
-           sum(COALESCE(tcc_gift_consume::DOUBLE, 0)) - 
-           sum(COALESCE(wechat_game_consume::DOUBLE, 0)) - 
-           sum(COALESCE(mutual_ad_consume::DOUBLE, 0)) - 
-           sum(COALESCE(traffic_ad_consume::DOUBLE, 0)) - 
-           sum(COALESCE(drama_gift_consume::DOUBLE, 0))
-       ) AS "结算消耗"
+SELECT t1.account_id AS "账户ID",
+       any_value(t2.n2) AS "客户名称",
+       any_value(t2.n3) AS "客户编号",
+       any_value(t1.account_name) AS "账户名称",
+        (
+           sum(COALESCE(t1.cash_consume::DOUBLE, 0)) + 
+           sum(COALESCE(t1.credit_consume::DOUBLE, 0)) + 
+           sum(COALESCE(t1.gift_consume::DOUBLE, 0)) - 
+           sum(COALESCE(t1.red_envelope_consume::DOUBLE, 0)) - 
+           sum(COALESCE(t1.wechat_gift_consume::DOUBLE, 0)) - 
+           sum(COALESCE(t1.wechat_quick_consume::DOUBLE, 0)) - 
+           sum(COALESCE(t1.special_consume::DOUBLE, 0)) - 
+           sum(COALESCE(t1.compensation_consume::DOUBLE, 0)) - 
+           sum(COALESCE(t1.android_app_consume::DOUBLE, 0)) - 
+           sum(COALESCE(t1.tcc_gift_consume::DOUBLE, 0)) - 
+           sum(COALESCE(t1.wechat_game_consume::DOUBLE, 0)) - 
+           sum(COALESCE(t1.mutual_ad_consume::DOUBLE, 0)) - 
+           sum(COALESCE(t1.traffic_ad_consume::DOUBLE, 0)) - 
+           sum(COALESCE(t1.drama_gift_consume::DOUBLE, 0))
+       ) AS "结算消耗",
+       any_value(t1.service_provider_short_name) AS "服务商简称",
+       any_value(t1.k_box) AS "k框",
+       any_value(t1.advertiser_group) AS "广告主集团",
+       any_value(t1.total_consume) AS "总消耗"
 FROM {guangdiantong_table} AS t1
 LEFT JOIN account AS t2 ON CAST(t1.account_id AS VARCHAR) = CAST(t2.id AS VARCHAR)
 GROUP BY account_id;
@@ -214,14 +222,17 @@ GROUP BY account_id;
                     temp_file = output_excel.replace('.xlsx', f'_temp_sheet{sheet_num + 1}.xlsx')
                     temp_file_path = temp_file.replace("\\", "\\\\")
                     temp_files.append(temp_file)
-                    
                     export_sql = f"""
 COPY
-  (SELECT "账户ID",
+  (SELECT "客户名称",
+          "客户编号",
           "账户名称",
-          "客户名称",
+          "结算消耗",
+          "账户ID",
+          "服务商简称",
           "k框",
-          "结算消耗"
+          "广告主集团",
+          "总消耗"
    FROM t_guangdiantong_month_final
    LIMIT 50000 OFFSET {offset}) TO '{temp_file_path}' WITH (FORMAT xlsx, HEADER true);
 """
@@ -249,11 +260,15 @@ COPY
                 export_sql = f"""
 -- 导出广点通月结数据
 COPY
-  (SELECT "账户ID",
+  (SELECT "客户名称",
+          "客户编号",
           "账户名称",
-          "客户名称",
+          "结算消耗",
+          "账户ID",
+          "服务商简称",
           "k框",
-          "结算消耗"
+          "广告主集团",
+          "总消耗"
    FROM t_guangdiantong_month_final
    ORDER BY "结算消耗" DESC) TO '{output_excel_path}' WITH (FORMAT xlsx, HEADER true);
 """
