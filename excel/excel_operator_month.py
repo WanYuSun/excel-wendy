@@ -50,25 +50,27 @@ excel_operator_month.py
     双击运行可执行文件或: python excel_operator_month.py
 """
 
+from excel.log import (setup_logging, log_success, log_error, log_info,
+                       log_warning, log_stage, log_progress, execute_sql_with_timing)
+from excel.handlers.month.toutiao import toutiao_month_entry_handler
+from excel.handlers.month.kuaishou_v2 import kuaishou_month_entry_handler as f4
+from excel.handlers.month.kuaishou import kuaishou_month_entry_handler
+from excel.handlers.month.guangdiantong_v2 import guangdiantong_v2_month_entry_handler
+from excel.handlers.month.guangdiantong import guangdiantong_month_entry_handler
+import duckdb
 import multiprocessing
 import os
 import sys
 from typing import List, Callable, Dict
 
 # 确保项目根目录在 Python 模块搜索路径中
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(
+    os.path.join(os.path.dirname(__file__), '..')))
 
-import duckdb
 
 # 导入月结处理器
-from excel.handlers.month.guangdiantong import guangdiantong_month_entry_handler
-from excel.handlers.month.guangdiantong_v2 import guangdiantong_v2_month_entry_handler
-from excel.handlers.month.kuaishou import kuaishou_month_entry_handler
-from excel.handlers.month.toutiao import toutiao_month_entry_handler
 
 # 导入统一的日志模块
-from excel.log import (setup_logging, log_success, log_error, log_info,
-                       log_warning, log_stage, log_progress, execute_sql_with_timing)
 
 # 导入本地select模块
 try:
@@ -162,6 +164,7 @@ register_month_entry("广点通", guangdiantong_month_entry_handler)
 register_month_entry("广点通-大端口", guangdiantong_v2_month_entry_handler)
 register_month_entry("快手", kuaishou_month_entry_handler)
 register_month_entry("头条", toutiao_month_entry_handler)
+register_month_entry("快手大健康金牛全站-执象", f4)
 
 
 def load_account_table(conn: duckdb.DuckDBPyConnection, base_dir: str) -> bool:
@@ -174,19 +177,19 @@ def load_account_table(conn: duckdb.DuckDBPyConnection, base_dir: str) -> bool:
     potential_files = []
     try:
         for file in os.listdir(base_dir):
-            if (file.lower().endswith('.xlsx') and 
-                ('媒体账户' in file or '媒体账号' in file or '账户列表' in file or '账号列表' in file)):
+            if (file.lower().endswith('.xlsx') and
+                    ('媒体账户' in file or '媒体账号' in file or '账户列表' in file or '账号列表' in file)):
                 potential_files.append(file)
     except Exception as e:
         log_error(f"扫描目录失败: {e}")
         return False
 
     excel_file = None
-    
+
     if len(potential_files) == 0:
         log_warning("未在可执行文件所在目录找到媒体账户Excel文件")
         log_info("提示：文件名应包含'媒体账户'、'媒体账号'、'账户列表'或'账号列表'等关键词")
-        
+
         # 询问用户是否手动输入路径
         while True:
             choice = input("是否手动输入媒体账户Excel文件路径？(y/n): ").strip().lower()
@@ -197,7 +200,7 @@ def load_account_table(conn: duckdb.DuckDBPyConnection, base_dir: str) -> bool:
                 return False
             else:
                 print("请输入 y/yes/是 或 n/no/否")
-        
+
         # 提示用户输入媒体账户Excel文件的绝对路径
         log_stage("文件选择", "选择媒体账户Excel文件")
         while True:
@@ -208,22 +211,24 @@ def load_account_table(conn: duckdb.DuckDBPyConnection, base_dir: str) -> bool:
                 break
             else:
                 print("文件不存在或不是Excel文件，请重新输入")
-                
+
     elif len(potential_files) == 1:
         excel_file = os.path.join(base_dir, potential_files[0])
         log_success(f"自动找到媒体账户文件: {potential_files[0]}")
-        
+
     else:
         log_info(f"发现多个可能的媒体账户文件: {potential_files}")
         print("发现多个可能的媒体账户文件:")
         for i, file in enumerate(potential_files, 1):
             print(f"  {i}. {file}")
-        
+
         while True:
             try:
-                choice = int(input(f"请选择要使用的文件 (1-{len(potential_files)}): ").strip())
+                choice = int(
+                    input(f"请选择要使用的文件 (1-{len(potential_files)}): ").strip())
                 if 1 <= choice <= len(potential_files):
-                    excel_file = os.path.join(base_dir, potential_files[choice-1])
+                    excel_file = os.path.join(
+                        base_dir, potential_files[choice-1])
                     log_success(f"选择文件: {potential_files[choice-1]}")
                     break
                 else:
@@ -277,12 +282,15 @@ def load_account_table(conn: duckdb.DuckDBPyConnection, base_dir: str) -> bool:
 
         # 重命名为account表
         log_stage("表重命名", "创建最终的account表")
-        execute_sql_with_timing(conn, "DROP TABLE IF EXISTS account", "删除已存在的account表")
-        execute_sql_with_timing(conn, "ALTER TABLE u_u_account RENAME TO account", "重命名为account表")
+        execute_sql_with_timing(
+            conn, "DROP TABLE IF EXISTS account", "删除已存在的account表")
+        execute_sql_with_timing(
+            conn, "ALTER TABLE u_u_account RENAME TO account", "重命名为account表")
 
         # 清理临时表
         log_stage("清理临时表", "清理临时数据表")
-        execute_sql_with_timing(conn, "DROP TABLE IF EXISTS u_account", "清理临时表u_account")
+        execute_sql_with_timing(
+            conn, "DROP TABLE IF EXISTS u_account", "清理临时表u_account")
 
         log_success("account表加载完成")
         return True
@@ -315,16 +323,16 @@ def main():
     # 设置统一的日志配置，在确定工作目录后
     log_file_path = os.path.join(base_dir, "excel_month.log")
     logger = setup_logging(log_file=log_file_path)
-    
+
     log_stage("程序启动", "Excel月结数据处理程序开始运行")
-    
+
     if getattr(sys, 'frozen', False):
         log_info(f"检测到打包环境，可执行文件路径: {sys.executable}")
         log_info(f"可执行文件所在目录: {executable_dir}")
         log_success(f"已自动切换到可执行文件所在目录: {base_dir}")
     else:
         log_info(f"检测到脚本环境，使用当前工作目录: {base_dir}")
-    
+
     log_info(f"最终工作目录: {base_dir}")
     log_info("处理类型: 月结数据")
     entries = list_process_entries(base_dir)
@@ -350,7 +358,8 @@ def main():
 
         for i, entry_dir in enumerate(entries, 1):
             try:
-                log_progress(i, len(entries), f"处理入口: {os.path.basename(entry_dir)}")
+                log_progress(i, len(entries),
+                             f"处理入口: {os.path.basename(entry_dir)}")
                 excels = list_excels(entry_dir)
                 entry_name = os.path.basename(entry_dir)
                 handle_entry(entry_name, entry_dir, excels, global_conn)
@@ -379,7 +388,7 @@ def main():
         global_conn.close()
         log_success("DuckDB连接已关闭")
         log_info("程序运行结束")
-        
+
         # 等待用户按键后退出
         input("\n按回车键退出程序...")
 

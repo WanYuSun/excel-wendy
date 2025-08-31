@@ -143,7 +143,8 @@ import duckdb
 from openpyxl import load_workbook
 
 # 导入统一的日志模块
-from excel.log import (execute_sql_with_timing, log_error, log_info, log_success, log_warning, setup_logging)
+from excel.log import (execute_sql_with_timing, log_error,
+                       log_info, log_success, log_warning, setup_logging)
 
 
 # execute_sql_with_timing 函数现在从 log 模块导入
@@ -178,7 +179,7 @@ def get_sheet_names(excel_file: str) -> List[str]:
 
 def union_sheets_concurrent(excel_file: str, table_name: str, conn: duckdb.DuckDBPyConnection,
                             projections: Optional[List[Tuple[str,
-                            Optional[str]]]] = None,
+                                                             Optional[str]]]] = None,
                             max_workers: int = None) -> None:
     """
     Excel多sheet高效并发合并函数
@@ -253,6 +254,20 @@ def union_sheets_concurrent(excel_file: str, table_name: str, conn: duckdb.DuckD
             except:
                 pass  # 扩展可能已经加载，忽略错误
 
+            # Probe the sheet with a minimal SELECT to validate the projection and sheet access.
+            # This lightweight LIMIT 1 query forces DuckDB to parse and validate the projection
+            # (and the read_xlsx call) without materializing the entire sheet into memory.
+            # If the provided projection is syntactically invalid or references missing columns,
+            # DuckDB will raise a precise error here (e.g. "column not found" or a SQL syntax error).
+            # We allow that detailed error to surface so callers receive a clear diagnosis
+            # instead of encountering a later, more obscure failure when creating the full table.
+            probe_sql = f"""
+SELECT {projection_str}
+FROM read_xlsx('{excel_file_escaped}', sheet='{sheet_name_escaped}', all_varchar=true)
+LIMIT 1;
+            """
+            thread_conn.execute(probe_sql)
+
             # 创建临时表
             create_sql = f"""
             CREATE TABLE {temp_table} AS
@@ -264,6 +279,7 @@ def union_sheets_concurrent(excel_file: str, table_name: str, conn: duckdb.DuckD
             """
 
             start_time = time.time()
+            log_info(f"执行SQL: {create_sql}")
             thread_conn.execute(create_sql)
             execution_time = time.time() - start_time
 
