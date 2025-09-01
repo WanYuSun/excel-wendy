@@ -57,6 +57,7 @@ from excel.handlers.month.kuaishou_v2 import kuaishou_month_entry_handler as f4
 from excel.handlers.month.kuaishou import kuaishou_month_entry_handler
 from excel.handlers.month.guangdiantong_v2 import guangdiantong_v2_month_entry_handler
 from excel.handlers.month.guangdiantong import guangdiantong_month_entry_handler
+from excel.handlers.month.zongmei import zongmei_month_entry_handler
 import duckdb
 import multiprocessing
 import os
@@ -133,17 +134,30 @@ def handle_entry(entry_name: str, entry_dir: str, excels: List[str],
     handler = None
     matched_key = None
 
-    # 首先尝试精确匹配
-    if entry_name in month_entry_registry:
-        handler = month_entry_registry[entry_name]
-        matched_key = entry_name
+    # 特殊处理：检查是否有综媒相关文件（小红书、汇川或趣头条）
+    xiaohongshu_files = [f for f in excels if '小红书' in f and f.lower().endswith('.xlsx')]
+    huichuan_files = [f for f in excels if '汇川' in f and f.lower().endswith('.xlsx')]
+    qutoutiao_files = [f for f in excels if '趣头' in f and f.lower().endswith('.xlsx')]
+    zongmei_files = [f for f in excels if '综媒' in f and f.lower().endswith('.xlsx')]
+    
+    if xiaohongshu_files or huichuan_files or qutoutiao_files or zongmei_files:
+        all_zongmei_files = xiaohongshu_files + huichuan_files + qutoutiao_files + zongmei_files
+        log_info(f"[{entry_name}] 检测到综媒相关文件: {all_zongmei_files}")
+        log_info(f"[{entry_name}] 自动使用综媒处理器")
+        handler = zongmei_month_entry_handler
+        matched_key = "综媒(自动检测)"
     else:
-        # 如果精确匹配失败，尝试startswith匹配
-        for handler_key in month_entry_registry:
-            if entry_name.startswith(handler_key):
-                handler = month_entry_registry[handler_key]
-                matched_key = handler_key
-                break
+        # 首先尝试精确匹配
+        if entry_name in month_entry_registry:
+            handler = month_entry_registry[entry_name]
+            matched_key = entry_name
+        else:
+            # 如果精确匹配失败，尝试startswith匹配
+            for handler_key in month_entry_registry:
+                if entry_name.startswith(handler_key):
+                    handler = month_entry_registry[handler_key]
+                    matched_key = handler_key
+                    break
 
     if not handler:
         log_warning(f"未注册月结入口处理器: '{entry_name}'")
@@ -165,6 +179,7 @@ register_month_entry("广点通-大端口", guangdiantong_v2_month_entry_handler
 register_month_entry("快手", kuaishou_month_entry_handler)
 register_month_entry("头条", toutiao_month_entry_handler)
 register_month_entry("快手大健康金牛全站-执象", f4)
+register_month_entry("综媒", zongmei_month_entry_handler)
 
 
 def load_account_table(conn: duckdb.DuckDBPyConnection, base_dir: str) -> bool:
