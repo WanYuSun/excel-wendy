@@ -79,7 +79,8 @@ def toutiao_month_entry_handler(entry_dir: str, excels: List[str],
         ('"返佣消耗"', 'rebate_consume'),
         ('"结算一级行业"', 'settle_industry_level1'),
         ('"结算二级行业"', 'settle_industry_level2'),
-        ('"总消耗"', 'total_consume')
+        ('"总消耗"', 'total_consume'),
+        ('"一级代理商账户名称"', 'first_level_agent_account_name')
     ]
     
     t_toutiao = 't_toutiao_month'
@@ -139,7 +140,8 @@ def toutiao_month_entry_handler(entry_dir: str, excels: List[str],
            any_value(t1.shared_wallet_name) AS "共享子钱包名称",
            sum(COALESCE(t1.total_consume::DOUBLE, 0)) AS "总消耗",
            any_value(t1.settle_industry_level1) AS "结算一级行业",
-           any_value(t1.settle_industry_level2) AS "结算二级行业"
+           any_value(t1.settle_industry_level2) AS "结算二级行业",
+           any_value(t1.first_level_agent_account_name) AS "一级代理商账户名称"
     FROM {toutiao_table} AS t1
     LEFT JOIN account AS t2 ON CAST(t1.advertiser_account_id AS VARCHAR) = CAST(t2.id AS VARCHAR)
     GROUP BY t1.advertiser_account_id;
@@ -204,7 +206,8 @@ COPY
           "共享子钱包名称",
           "总消耗",
           "结算一级行业",
-          "结算二级行业"
+          "结算二级行业",
+          "一级代理商账户名称"
    FROM t_toutiao_month_final
    LIMIT 50000 OFFSET {offset}) TO '{temp_file_path}' WITH (FORMAT xlsx, HEADER true);
 """
@@ -242,7 +245,8 @@ COPY
           "共享子钱包名称",
           "总消耗",
           "结算一级行业",
-          "结算二级行业"
+          "结算二级行业",
+          "一级代理商账户名称"
    FROM t_toutiao_month_final
    ORDER BY "结算消耗" DESC) TO '{output_excel_path}' WITH (FORMAT xlsx, HEADER true);
 """
