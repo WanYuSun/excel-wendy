@@ -166,6 +166,9 @@ def toutiao_month_entry_handler(entry_dir: str, excels: List[str],
         ).replace(
             'any_value(t2.n2) AS "客户名称",  -- 从媒体账户表获取客户名称',
             'NULL AS "客户名称",  -- account表不存在，使用NULL'
+        ).replace(
+            'any_value(t2.n3) AS "客户编号",  -- 客户编号',
+            'NULL AS "客户编号",  -- account表不存在，使用NULL'
         )
 
     # 执行数据汇总
@@ -247,8 +250,7 @@ COPY
           "结算一级行业",
           "结算二级行业",
           "一级代理商账户名称"
-   FROM t_toutiao_month_final
-   ORDER BY "结算消耗" DESC) TO '{output_excel_path}' WITH (FORMAT xlsx, HEADER true);
+   FROM t_toutiao_month_final) TO '{output_excel_path}' WITH (FORMAT xlsx, HEADER true);
 """
             execute_sql_with_timing(conn, export_sql, f"[{entry_name}] 导出头条月结数据")
             log_success(f"[{entry_name}] 头条月结结果已输出到: {output_excel}")

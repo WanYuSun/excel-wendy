@@ -281,8 +281,7 @@ SELECT t1.account_id AS "账户ID",
        sum(COALESCE(t1.total_consume::DOUBLE, 0)) AS "总消耗"
 FROM {kuaishou_table} AS t1
 LEFT JOIN account AS t2 ON CAST(t1.account_id AS VARCHAR) = CAST(t2.id AS VARCHAR)  -- 确保数据类型匹配
-GROUP BY t1.account_id
-ORDER BY "结算消耗" DESC;
+GROUP BY t1.account_id;
 """
 
     # 检查数据量，决定输出策略
@@ -315,10 +314,9 @@ SELECT COUNT(*) as total_rows FROM (
         ).replace(
             'any_value(t2.n2) AS "客户名称",  -- 从媒体账户表获取客户名称',
             'NULL AS "客户名称",  -- account表不存在，使用NULL'
-        )
-        output_strategy_sql = output_strategy_sql.replace(
-            'LEFT JOIN account AS t2 ON CAST(t1.account_id AS VARCHAR) = CAST(t2.id AS VARCHAR)',
-            ''
+        ).replace(
+            'any_value(t2.n3) AS "客户编号",  -- 从媒体账户表获取客户编号',
+            'NULL AS "客户编号",  -- account表不存在，使用NULL'
         )
 
     # 执行数据汇总

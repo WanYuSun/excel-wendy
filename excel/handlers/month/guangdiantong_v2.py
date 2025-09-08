@@ -221,8 +221,7 @@ COPY
           "客户名称",
           "k框",
           "结算消耗"
-   FROM t_guang_v2_month
-   ORDER BY "结算消耗" DESC) TO '{output_excel_path}' WITH (FORMAT xlsx, HEADER true);
+   FROM t_guang_v2_month) TO '{output_excel_path}' WITH (FORMAT xlsx, HEADER true);
 """
                 execute_sql_with_timing(conn, export_sql, f"[{entry_name}] 导出广点通大端口月结数据")
                 log_success(f"[{entry_name}] 大端口月结结果已输出到: {output_excel}")
