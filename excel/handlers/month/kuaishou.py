@@ -329,12 +329,13 @@ SELECT COUNT(*) as total_rows FROM (
         final_row_count = conn.fetchone()[0]
         log_info(f"[{entry_name}] 汇总后数据量: {final_row_count} 行")
 
-        # 如果数据量超过50000行，考虑分sheet处理
-        if final_row_count > 50000:
+         # 如果数据量超过5000000行，考虑分sheet处理
+        kMaxRowsPerXlsx=1_000_000
+        if final_row_count > kMaxRowsPerXlsx:
             log_info(
                 f"[{entry_name}] 数据量较大({final_row_count}行)，将在单个Excel文件中创建多个sheet")
-            # 每个sheet最多50000行
-            sheets_needed = (final_row_count + 49999) // 50000
+            # 每个sheet最多1_000_000行
+            sheets_needed = (final_row_count + kMaxRowsPerXlsx - 1) // kMaxRowsPerXlsx
             log_info(f"[{entry_name}] 预计需要 {sheets_needed} 个sheet")
 
             # 由于DuckDB的COPY命令限制，我们先分别导出为临时文件，然后合并
@@ -342,7 +343,7 @@ SELECT COUNT(*) as total_rows FROM (
 
             # 分批导出到临时文件
             for sheet_num in range(sheets_needed):
-                offset = sheet_num * 50000
+                offset = sheet_num * kMaxRowsPerXlsx
                 temp_file = output_excel.replace(
                     '.xlsx', f'_temp_sheet{sheet_num + 1}.xlsx')
                 temp_file_path = temp_file.replace("\\", "\\\\")
