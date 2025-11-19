@@ -268,6 +268,11 @@ CREATE TABLE t_kuaishou_month_final AS
 SELECT t1.account_id AS "账户ID",
        any_value(t2.n2) AS "客户名称",  -- 从媒体账户表获取客户名称
        any_value(t2.n3) AS "客户编号",  -- 从媒体账户表获取客户编号
+       any_value(t2.n4) AS "AE",
+       any_value(t2.n5) AS "销售",
+        any_value(t2.n7) AS "返点形式",
+       any_value(t2.n6) AS "返点比率",
+       any_value(t2.n8) AS "端口",
        any_value(t1.company_name) AS "公司名称",
         (sum(COALESCE(t1.cash_cost::DOUBLE, 0)) + sum(COALESCE(t1.credit_cost::DOUBLE, 0)) + 
         sum(COALESCE(t1.front_rebate_cost::DOUBLE, 0)) + sum(COALESCE(t1.back_rebate_cost::DOUBLE, 0))) AS "结算消耗",  -- 结算消耗 = 四种花费分别求和后相加
@@ -317,6 +322,21 @@ SELECT COUNT(*) as total_rows FROM (
         ).replace(
             'any_value(t2.n3) AS "客户编号",  -- 从媒体账户表获取客户编号',
             'NULL AS "客户编号",  -- account表不存在，使用NULL'
+        ).replace(
+            'any_value(t2.n4) AS "AE",',
+            'NULL AS "AE",'
+        ).replace(
+            'any_value(t2.n5) AS "销售",',
+            'NULL AS "销售",'
+        ).replace(
+            'any_value(t2.n6) AS "返点比率",',
+            'NULL AS "返点比率",'
+        ).replace(
+            'any_value(t2.n7) AS "返点形式",',
+            'NULL AS "返点形式",'
+        ).replace(
+            'any_value(t2.n8) AS "端口",',
+            'NULL AS "端口",'
         )
 
     # 执行数据汇总
@@ -329,7 +349,7 @@ SELECT COUNT(*) as total_rows FROM (
         final_row_count = conn.fetchone()[0]
         log_info(f"[{entry_name}] 汇总后数据量: {final_row_count} 行")
 
-         # 如果数据量超过5000000行，考虑分sheet处理
+         # 如果数据量超过1_000_000行，考虑分sheet处理
         kMaxRowsPerXlsx=1_000_000
         if final_row_count > kMaxRowsPerXlsx:
             log_info(
@@ -353,6 +373,11 @@ COPY
   (SELECT "客户名称",
           "客户编号",
           "公司名称",
+          "AE",
+          "销售",
+          "返点形式",
+          "返点比率",
+          "端口",
           "结算消耗",
           "账户ID",
           "账户类型",
@@ -396,6 +421,11 @@ COPY
   (SELECT "客户名称",
           "客户编号",
           "公司名称",
+          "AE",
+          "销售",
+          "返点形式",
+          "返点比率",
+            "端口",
           "结算消耗",
           "账户ID",
           "账户类型",

@@ -144,6 +144,11 @@ CREATE TABLE t_guangdiantong_month_final AS
 SELECT t1.account_id AS "账户ID",
        any_value(t2.n2) AS "客户名称",
        any_value(t2.n3) AS "客户编号",
+       any_value(t2.n4) AS "AE",
+       any_value(t2.n5) AS "销售",
+       any_value(t2.n7) AS "返点形式",
+       any_value(t2.n6) AS "返点比率",
+       any_value(t2.n8) AS "端口",
        any_value(t1.account_name) AS "账户名称",
         (
            sum(COALESCE(t1.cash_consume::DOUBLE, 0)) + 
@@ -205,7 +210,7 @@ GROUP BY account_id;
             final_row_count = conn.fetchone()[0]
             log_info(f"[{entry_name}] 汇总后数据量: {final_row_count} 行")
 
-            # 如果数据量超过5000000行，考虑分sheet处理
+            # 如果数据量超过1_000_000行，考虑分sheet处理
             kMaxRowsPerXlsx=1_000_000
             if final_row_count > kMaxRowsPerXlsx:
                 log_info(f"[{entry_name}] 数据量较大({final_row_count}行)，将在单个Excel文件中创建多个sheet")
@@ -226,6 +231,11 @@ COPY
   (SELECT "客户名称",
           "客户编号",
           "账户名称",
+           "AE",
+          "销售",
+          "返点形式",
+          "返点比率",
+          "端口",
           "结算消耗",
           "账户ID",
           "服务商简称",
@@ -262,6 +272,11 @@ COPY
   (SELECT "客户名称",
           "客户编号",
           "账户名称",
+           "AE",
+          "销售",
+          "返点形式",
+          "返点比率",
+          "端口",
           "结算消耗",
           "账户ID",
           "服务商简称",

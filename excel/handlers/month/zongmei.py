@@ -592,6 +592,11 @@ WHERE 1=1 {other_media_condition};
 CREATE TABLE t_zongmei_month_final AS
 SELECT t2.n2 AS "客户名称",  -- 从媒体账户表获取客户名称
        t2.n3 AS "客户编号",  -- 从媒体账户表获取客户编号
+       t2.n4 AS "AE",
+       t2.n5 AS "销售",
+       t2.n7 AS "返点形式",
+       t2.n6 AS "返点比率",
+       t2.n8 AS "端口",
        t1.customer_name AS "客户名称_原始",  -- 原始文件中的客户名称
        sum(COALESCE(t1.consumption::DOUBLE, 0)) AS "消费",  -- 消费求和
        t1.account_id AS "账户id",
@@ -622,6 +627,11 @@ DROP TABLE IF EXISTS t_zongmei_month_final;
 CREATE TABLE t_zongmei_month_final AS
 SELECT t2.n2 AS "客户名称",  -- 从媒体账户表获取客户名称
        t2.n3 AS "客户编号",  -- 从媒体账户表获取客户编号
+       t2.n4 AS "AE",
+       t2.n5 AS "销售",
+       t2.n7 AS "返点形式",
+       t2.n6 AS "返点比率",
+       t2.n8 AS "端口",
        t1.customer_name AS "客户名称_原始",  -- 汇川文件中的客户名称
        sum(COALESCE(t1.consumption::DOUBLE, 0)) AS "消费",  -- 消费求和
        t1.account_id AS "账户id",
@@ -641,6 +651,11 @@ DROP TABLE IF EXISTS t_zongmei_month_final;
 CREATE TABLE t_zongmei_month_final AS
 SELECT t2.n2 AS "客户名称",  -- 从媒体账户表获取客户名称
        t2.n3 AS "客户编号",  -- 从媒体账户表获取客户编号
+       t2.n4 AS "AE",
+       t2.n5 AS "销售",
+       t2.n7 AS "返点形式",
+       t2.n6 AS "返点比率",
+       t2.n8 AS "端口",
        t1.customer_name AS "客户名称_原始",  -- 综媒文件中的客户名称
        sum(COALESCE(t1.consumption::DOUBLE, 0)) AS "消费",  -- 消费求和
        t1.account_id AS "账户id",
@@ -682,6 +697,21 @@ ORDER BY "消费" DESC;
             ).replace(
                 't2.n3 AS "客户编号",  -- 从媒体账户表获取客户编号',
                 'NULL AS "客户编号",  -- account表不存在，使用NULL'
+            ).replace(
+                't2.n4 AS "AE",',
+                'NULL AS "AE",'
+            ).replace(
+                't2.n5 AS "销售",',
+                'NULL AS "销售",'
+            ).replace(
+                't2.n6 AS "返点比率",',
+                'NULL AS "返点比率",'
+            ).replace(
+                't2.n7 AS "返点形式",',
+                'NULL AS "返点形式",'
+            ).replace(
+                't2.n8 AS "端口",',
+                'NULL AS "端口",'
             ).replace(
                 'GROUP BY t1.account_id, t1.customer_name, t2.n2, t2.n3',
                 'GROUP BY t1.account_id, t1.customer_name'
@@ -767,6 +797,11 @@ CREATE TABLE t_all_media_combined AS
 CREATE TABLE t_zongmei_month_final AS
 SELECT t2.n2 AS "客户名称",  -- 从媒体账户表获取客户名称
        t2.n3 AS "客户编号",  -- 从媒体账户表获取客户编号
+       any_value(t2.n4) AS "AE",
+       any_value(t2.n5) AS "销售",
+       any_value(t2.n7) AS "返点形式",
+       any_value(t2.n6) AS "返点比率",
+       any_value(t2.n8) AS "端口",
        t1.customer_name AS "客户名称_原始",  -- 原始文件中的客户名称
        sum(COALESCE(t1.consumption::DOUBLE, 0)) AS "消费",  -- 消费求和
        t1.account_id AS "账户id",
@@ -828,6 +863,11 @@ DROP TABLE IF EXISTS t_zongmei_month_final;
 CREATE TABLE t_zongmei_month_final AS
 SELECT t2.n2 AS "客户名称",  -- 从媒体账户表获取客户名称
        t2.n3 AS "客户编号",  -- 从媒体账户表获取客户编号
+       any_value(t2.n4) AS "AE",
+       any_value(t2.n5) AS "销售",
+       any_value(t2.n7) AS "返点形式",
+       any_value(t2.n6) AS "返点比率",
+       any_value(t2.n8) AS "端口",
        t1.customer_name AS "客户名称_原始",  -- 原始文件中的客户名称
        sum(COALESCE(t1.consumption::DOUBLE, 0)) AS "消费",  -- 消费求和
        t1.account_id AS "账户id",
@@ -879,6 +919,11 @@ ORDER BY "消费" DESC;
 "客户名称",
 "客户编号", 
 "客户名称_原始",
+"AE",
+"销售",
+"返点形式",
+"返点比率",
+"端口",
 "消费",
 "账户id",
 "账户名称",
@@ -890,6 +935,11 @@ ORDER BY "消费" DESC;
 "客户名称",
 "客户编号", 
 "客户名称_原始",
+"AE",
+"销售",
+"返点形式",
+"返点比率",
+"端口",
 "消费",
 "账户id",
 "账户名称",

@@ -269,7 +269,12 @@ def load_account_table(conn: duckdb.DuckDBPyConnection, base_dir: str) -> bool:
             ('"账号ID"', "id"),
             ('"媒体账户主体"', "n1"),
             ('"客户名称"', "n2"),
-            ('"客户编号"', "n3")
+            ('"客户编号"', "n3"),
+            ('"AE"', "n4"),
+            ('"销售"', "n5"),
+            ('"返点比率"', "n6"),
+            ('"返点形式"', "n7"),
+            ('"端口"', "n8")
         ]
 
         union_sheets_concurrent(
@@ -286,7 +291,12 @@ def load_account_table(conn: duckdb.DuckDBPyConnection, base_dir: str) -> bool:
             ("id", None),
             ("any_value(n1)", "n1"),
             ("any_value(n2)", "n2"),
-            ("any_value(n3)", "n3")
+            ("any_value(n3)", "n3"),
+            ("any_value(n4)", "n4"),
+            ("any_value(n5)", "n5"),
+            ("any_value(n6)", "n6"),
+            ("any_value(n7)", "n7"),
+            ("any_value(n8)", "n8")
         ]
 
         unique_keys(

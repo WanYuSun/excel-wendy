@@ -268,6 +268,11 @@ CREATE TABLE t_kuaishou_month_final AS
 SELECT t1.account_id AS "账户ID",
        any_value(t2.n2) AS "客户名称",  -- 从媒体账户表获取客户名称
        any_value(t2.n3) AS "客户编号",  -- 从媒体账户表获取客户编号
+       any_value(t2.n4) AS "AE",  -- 从媒体账户表获取AE
+       any_value(t2.n5) AS "销售",  -- 从媒体账户表获取销售
+       any_value(t2.n7) AS "返点形式",
+       any_value(t2.n6) AS "返点比率",  -- 从媒体账户表获取返点比率
+       any_value(t2.n8) AS "端口",
        any_value(t1.company_name) AS "公司名称",
         (sum(COALESCE(t1.cash_cost::DOUBLE, 0)) + sum(COALESCE(t1.credit_cost::DOUBLE, 0)) + 
         sum(COALESCE(t1.front_rebate_cost::DOUBLE, 0)) + sum(COALESCE(t1.back_rebate_cost::DOUBLE, 0))) AS "结算消耗",  -- 结算消耗 = 四种花费分别求和后相加
@@ -354,6 +359,11 @@ COPY
   (SELECT "客户名称",
           "客户编号",
           "公司名称",
+          "AE",
+          "销售",
+          "返点形式",
+          "返点比率",
+          "端口",
           "结算消耗",
           "账户ID",
           "账户类型",
@@ -397,6 +407,11 @@ COPY
   (SELECT "客户名称",
           "客户编号",
           "公司名称",
+           "AE",
+          "销售",
+          "返点形式",
+          "返点比率",
+          "端口",
           "结算消耗",
           "账户ID",
           "账户类型",

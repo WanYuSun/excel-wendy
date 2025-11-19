@@ -134,6 +134,11 @@ def toutiao_month_entry_handler(entry_dir: str, excels: List[str],
            any_value(t1.advertiser_company_name) AS "广告主公司名称",
            any_value(t2.n2) AS "客户名称",  -- 客户名称
            any_value(t2.n3) AS "客户编号",  -- 客户编号
+           any_value(t2.n4) AS "AE",
+           any_value(t2.n5) AS "销售",
+            any_value(t2.n7) AS "返点形式",
+           any_value(t2.n6) AS "返点比率",
+            any_value(t2.n8) AS "端口",
            (sum(COALESCE(t1.non_gift_consume::DOUBLE, 0)) - sum(COALESCE(t1.rebate_consume::DOUBLE, 0))) AS "结算消耗",
            any_value(t1.advertiser_account_id) AS "账户ID",
            any_value(t1.advertiser_account_name) AS "广告主账户名称",
@@ -169,6 +174,21 @@ def toutiao_month_entry_handler(entry_dir: str, excels: List[str],
         ).replace(
             'any_value(t2.n3) AS "客户编号",  -- 客户编号',
             'NULL AS "客户编号",  -- account表不存在，使用NULL'
+        ).replace(
+            'any_value(t2.n4) AS "AE",',
+            'NULL AS "AE",'
+        ).replace(
+            'any_value(t2.n5) AS "销售",',
+            'NULL AS "销售",'
+        ).replace(
+            'any_value(t2.n6) AS "返点比率",',
+            'NULL AS "返点比率",'
+        ).replace(
+            'any_value(t2.n7) AS "返点形式",',
+            'NULL AS "返点形式",'
+        ).replace(
+            'any_value(t2.n8) AS "端口",',
+            'NULL AS "端口",'
         )
 
     # 执行数据汇总
@@ -181,7 +201,7 @@ def toutiao_month_entry_handler(entry_dir: str, excels: List[str],
         final_row_count = conn.fetchone()[0]
         log_info(f"[{entry_name}] 汇总后数据量: {final_row_count} 行")
         
-        # 如果数据量超过5000000行，考虑分sheet处理
+        # 如果数据量超过1_000_000行，考虑分sheet处理
         kMaxRowsPerXlsx=1_000_000
         if final_row_count > kMaxRowsPerXlsx:
             log_info(f"[{entry_name}] 数据量较大({final_row_count}行)，将在单个Excel文件中创建多个sheet")
@@ -203,6 +223,11 @@ COPY
   (SELECT "客户名称",
           "客户编号",
           "广告主公司名称",
+           "AE",
+          "销售",
+          "返点形式",
+          "返点比率",
+          "端口",
           "结算消耗",
           "账户ID",
           "广告主账户id",
@@ -242,6 +267,11 @@ COPY
   (SELECT "客户名称",
           "客户编号",
           "广告主公司名称",
+           "AE",
+          "销售",
+          "返点形式",
+          "返点比率",
+          "端口",
           "结算消耗",
           "账户ID",
           "广告主账户id",
